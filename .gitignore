@@ -1,0 +1,10 @@
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+.Rcheck/
+*.Rcheck/
+test_data/*
+legacy_scripts/
+
+!test_data/.gitkeep

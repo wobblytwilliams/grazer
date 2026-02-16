@@ -1,0 +1,3 @@
+^legacy_scripts$
+^test_data$
+^\\.vscode$
