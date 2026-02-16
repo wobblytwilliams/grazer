@@ -65,6 +65,14 @@ Social alignment default:
 Default epoch:
 - `day`
 
+### Step F: Behavior Interpretation Loop
+- `grz_plot_diurnal_metrics()` (cohort/group metric heatmaps for threshold setting)
+- `grz_behavior_threshold_guide()` (hourly quantiles + distribution plots for threshold tuning)
+- `grz_classify_behavior()` (rule-based `rest` / `graze` / `travel`)
+- `grz_plot_diurnal_states()` (diurnal state proportions)
+- `grz_validate_behavior()` (state counts, transitions, bouts, PCA diagnostic)
+- `grz_behavior_pipeline()` wrapper
+
 ## 3. Optional Utility Functions
 
 - `grz_align()` (interpolate/align at explicit or base interval)
@@ -107,6 +115,14 @@ Epoch-level calculations:
 - `grz_summarise_social()`
 - `grz_calculate_spatial()`
 - `grz_calculate_epoch_metrics()`
+
+Behavior interpretation:
+- `grz_plot_diurnal_metrics()`
+- `grz_behavior_threshold_guide()`
+- `grz_classify_behavior()`
+- `grz_plot_diurnal_states()`
+- `grz_validate_behavior()`
+- `grz_behavior_pipeline()`
 
 Legacy draft metrics (retained for compatibility):
 - `grz_remove_duplicates()`

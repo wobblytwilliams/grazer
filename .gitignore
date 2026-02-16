@@ -8,3 +8,4 @@ test_data/*
 legacy_scripts/
 
 !test_data/.gitkeep
+Rplots.pdf

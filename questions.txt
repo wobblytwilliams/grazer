@@ -10,3 +10,5 @@
 10. `grz_calculate_social()`: current default herd partition is `deployment_id` and `paddock` when available. Confirm if this should be configurable in the main wrapper.
 11. `grz_calculate_spatial()`: `kde95_ha` currently uses covariance-ellipse proxy area, not full kernel contour extraction. Confirm whether to keep proxy for v1 or move to true KDE (extra package dependency).
 12. `grz_clean()`: default steps are `duplicates -> errors -> speed_fixed -> denoise`. Confirm whether `spatial` should be in defaults when paddocks are provided.
+13. `grz_classify_behavior()`: current default rule thresholds are `rest_speed_max = 0.05`, `graze_speed_max = 0.60`, `travel_speed_min = 0.60` m/s. Confirm if these should be tuned by cohort/deployment defaults.
+14. `grz_validate_behavior()`: PCA is exploratory only. Confirm whether you want an additional formal clustering-quality metric (e.g., silhouette) in v1.

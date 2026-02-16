@@ -13,6 +13,7 @@ Imports:
     data.table,
     tools
 Suggests:
+    ggplot2,
     leaflet,
     leaflet.extras2,
     sf,

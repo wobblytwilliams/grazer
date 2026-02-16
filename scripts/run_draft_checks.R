@@ -88,4 +88,34 @@ if (requireNamespace("sf", quietly = TRUE)) {
   cat("rows:", nrow(x_sp), "has paddock:", "paddock" %in% names(x_sp), "\n")
 }
 
+cat("\n12) behavior workflow\n")
+beh_rows <- grz_classify_behavior(x_clean, verbose = TRUE)
+beh_val <- grz_validate_behavior(beh_rows, verbose = TRUE, pca = TRUE)
+beh_guide <- grz_behavior_threshold_guide(beh_rows)
+cat(
+  "classified rows:", nrow(beh_rows),
+  "state levels:", paste(sort(unique(na.omit(beh_rows$behavior_state))), collapse = ","),
+  "validation states:", nrow(beh_val$state_counts),
+  "guide overall rows:", nrow(beh_guide$overall), "\n"
+)
+
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  p_metric <- grz_plot_diurnal_metrics(beh_rows)
+  p_state <- grz_plot_diurnal_states(beh_rows)
+  bp <- grz_behavior_pipeline(
+    beh_rows,
+    threshold_guide = TRUE,
+    metrics_plot = TRUE,
+    states_plot = TRUE,
+    validate = TRUE,
+    verbose = TRUE
+  )
+  cat(
+    "diurnal_metric_plot:", inherits(p_metric, "ggplot"),
+    "diurnal_state_plot:", inherits(p_state, "ggplot"),
+    "pipeline_has_data:", !is.null(bp$data),
+    "pipeline_has_threshold_guide:", !is.null(bp$threshold_guide), "\n"
+  )
+}
+
 cat("\nDraft checks complete.\n")
