@@ -74,6 +74,20 @@ grz_parse_datetime_utc <- function(x) {
   out
 }
 
+#' Standardise GPS column names and core types
+#'
+#' Maps input headings to canonical names (`sensor_id`, `datetime`, `lon`,
+#' `lat`), coerces core types, and carries optional metadata columns.
+#'
+#' @param data Input data frame.
+#' @param colmap Optional named character vector mapping canonical names to
+#'   source column names.
+#' @param deployment_id Optional deployment identifier (single value or vector
+#'   of length `nrow(data)`).
+#' @param keep_extra Logical; keep non-core source columns.
+#'
+#' @return A `data.table` with canonical GPS columns.
+#' @export
 grz_standardise_gps <- function(data, colmap = NULL, deployment_id = NULL, keep_extra = TRUE) {
   if (!is.data.frame(data)) {
     stop("`data` must be a data.frame.", call. = FALSE)
@@ -149,6 +163,22 @@ grz_standardise_gps <- function(data, colmap = NULL, deployment_id = NULL, keep_
   out
 }
 
+#' Validate canonical GPS data
+#'
+#' Validates required GPS columns and row values, returning cleaned/typed data
+#' plus QC and invalid-row details.
+#'
+#' @param data Input data frame with canonical GPS columns.
+#' @param drop_invalid Logical; if `TRUE`, invalid rows are removed from
+#'   returned `data`.
+#'
+#' @return A list with class `grz_validation` containing:
+#' \describe{
+#'   \item{data}{Typed data (optionally with invalid rows removed).}
+#'   \item{qc}{QC summary table (`data.table`).}
+#'   \item{invalid_rows}{Rows flagged as invalid with reasons.}
+#' }
+#' @export
 grz_validate_gps <- function(data, drop_invalid = FALSE) {
   if (!is.data.frame(data)) {
     stop("`data` must be a data.frame.", call. = FALSE)
@@ -249,6 +279,23 @@ grz_validate_gps <- function(data, drop_invalid = FALSE) {
   )
 }
 
+#' Read and standardise GPS file input
+#'
+#' Reads CSV or parquet, maps columns to canonical names, and optionally runs
+#' validation.
+#'
+#' @param path File path.
+#' @param source Input source type (`"auto"`, `"csv"`, `"parquet"`).
+#' @param colmap Optional named mapping for canonical columns.
+#' @param deployment_id Optional deployment identifier override.
+#' @param keep_extra Logical; keep non-core source columns.
+#' @param n_max Optional row limit.
+#' @param validate Logical; run `grz_validate_gps()` after standardisation.
+#' @param drop_invalid Logical; if validating, drop invalid rows.
+#'
+#' @return A canonical GPS `data.table`. When `validate = TRUE`, QC attributes
+#'   are attached: `qc_summary` and `invalid_rows`.
+#' @export
 grz_read_gps <- function(
   path,
   source = c("auto", "csv", "parquet"),
