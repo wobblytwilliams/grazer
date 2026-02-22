@@ -11,6 +11,9 @@ grz_map(
   datetime = "datetime",
   block = NULL,
   group = NULL,
+  state_col = NULL,
+  state_colors = c(inactive = "#d7191c", active = "#1a9641"),
+  state_legend_title = "State",
   timeline = FALSE,
   popup_fields = c("sensor_id", "datetime"),
   provider = "Esri.WorldImagery",
@@ -38,6 +41,14 @@ grz_map(
 \item{block}{Deprecated alias for \code{group}.}
 
 \item{group}{Optional grouping column(s) for colour/layer separation.}
+
+\item{state_col}{Optional state column for fixed state colouring (for
+example \code{activity_state_hmm}).}
+
+\item{state_colors}{Named colours for state levels. Defaults to red
+(\code{inactive}) and green (\code{active}).}
+
+\item{state_legend_title}{Legend title used when \code{state_col} is provided.}
 
 \item{timeline}{Logical; if \code{TRUE}, render points with an interactive time slider.}
 

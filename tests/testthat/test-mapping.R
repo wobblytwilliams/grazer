@@ -62,6 +62,38 @@ test_that("grz_map timeline path adds timeslider calls", {
   expect_true(any(grepl("timeslider", methods, ignore.case = TRUE)))
 })
 
+test_that("grz_map supports fixed state colouring with legend", {
+  skip_if_not_installed("leaflet")
+
+  dat <- data.frame(
+    sensor_id = c("A001", "A001", "A002", "A002"),
+    datetime = c(
+      "2022-08-28T00:54:28Z",
+      "2022-08-28T01:24:54Z",
+      "2022-08-28T01:40:39Z",
+      "2022-08-28T01:56:06Z"
+    ),
+    lon = c(132.305676, 132.305923, 132.305226, 132.306158),
+    lat = c(-14.474048, -14.473868, -14.474055, -14.473746),
+    activity_state_hmm = c("inactive", "active", "inactive", "active"),
+    stringsAsFactors = FALSE
+  )
+
+  map <- grz_map(dat, state_col = "activity_state_hmm")
+  expect_s3_class(map, "leaflet")
+
+  methods <- vapply(map$x$calls, function(x) x$method, character(1))
+  expect_true("addCircleMarkers" %in% methods)
+  expect_true("addLegend" %in% methods)
+
+  marker_call <- Filter(function(x) identical(x$method, "addCircleMarkers"), map$x$calls)[[1]]
+  fill_cols <- marker_call$args[[6]]$fillColor
+  expect_true(all(fill_cols %in% c("#d7191c", "#1a9641")))
+
+  legend_call <- Filter(function(x) identical(x$method, "addLegend"), map$x$calls)[[1]]
+  expect_true(all(c("inactive", "active") %in% as.character(legend_call$args[[1]]$labels)))
+})
+
 test_that("grz_map errors when required columns are missing", {
   skip_if_not_installed("leaflet")
 

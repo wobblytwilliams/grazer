@@ -90,13 +90,27 @@ if (requireNamespace("sf", quietly = TRUE)) {
 
 cat("\n12) behavior workflow\n")
 beh_rows <- grz_classify_behavior(x_clean, verbose = TRUE)
+beh_hmm <- grz_classify_activity_hmm(x_clean, verbose = TRUE)
+beh_spatial <- grz_classify_activity_spatial(x_clean, verbose = TRUE)
+beh_cons <- grz_classify_activity_consensus(x_clean, verbose = TRUE)
 beh_val <- grz_validate_behavior(beh_rows, verbose = TRUE, pca = TRUE)
 beh_guide <- grz_behavior_threshold_guide(beh_rows)
+beh_tune <- grz_tune_thresholds(
+  beh_rows,
+  rest_step_grid = seq(3, 9, by = 2),
+  rest_speed_grid = seq(0.03, 0.09, by = 0.03),
+  max_rows = 2000,
+  verbose = FALSE
+)
 cat(
   "classified rows:", nrow(beh_rows),
   "state levels:", paste(sort(unique(na.omit(beh_rows$behavior_state))), collapse = ","),
+  "hmm levels:", paste(sort(unique(na.omit(beh_hmm$activity_state_hmm))), collapse = ","),
+  "spatial levels:", paste(sort(unique(na.omit(beh_spatial$activity_state_spatial))), collapse = ","),
+  "consensus levels:", paste(sort(unique(na.omit(beh_cons$activity_state_consensus))), collapse = ","),
   "validation states:", nrow(beh_val$state_counts),
-  "guide overall rows:", nrow(beh_guide$overall), "\n"
+  "guide overall rows:", nrow(beh_guide$overall),
+  "tune suggested rows:", nrow(beh_tune$suggested), "\n"
 )
 
 if (requireNamespace("ggplot2", quietly = TRUE)) {

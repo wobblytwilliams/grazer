@@ -12,6 +12,10 @@ grz_behavior_threshold_guide(
   probs = c(0.1, 0.25, 0.5, 0.75, 0.9),
   max_points_plot = 150000L,
   seed = 1,
+  include_tuning = TRUE,
+  tuning_rest_step_grid = seq(3, 12, by = 1),
+  tuning_rest_speed_grid = seq(0.03, 0.09, by = 0.02),
+  tuning_max_rows = 25000L,
   return_class = c("data.frame", "data.table")
 )
 }
@@ -31,10 +35,19 @@ grz_behavior_threshold_guide(
 
 \item{seed}{Random seed used for plotting subsample.}
 
+\item{include_tuning}{Logical; run threshold tuning diagnostics.}
+
+\item{tuning_rest_step_grid}{Candidate \code{rest_step_max} values for tuning.}
+
+\item{tuning_rest_speed_grid}{Candidate \code{rest_speed_max} values for tuning.}
+
+\item{tuning_max_rows}{Maximum rows used in tuning sweep.}
+
 \item{return_class}{Output class for returned tables.}
 }
 \value{
-A list with \code{overall}, \code{hourly}, and \code{plots} (ggplot objects).
+A list with \code{overall}, \code{hourly}, \code{plots} (ggplot objects), and
+optional \code{tuning} diagnostics.
 }
 \description{
 Produces overall and hourly quantile summaries (plus diagnostic plots) for

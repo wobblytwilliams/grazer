@@ -33,6 +33,45 @@ grz_make_block_palette <- function(values) {
   leaflet::colorFactor(palette = cols, domain = values)
 }
 
+grz_make_state_palette <- function(values, state_colors = c(inactive = "#d7191c", active = "#1a9641")) {
+  if (!is.character(state_colors) || length(state_colors) < 1L) {
+    stop("`state_colors` must be a named character vector of colours.", call. = FALSE)
+  }
+  if (is.null(names(state_colors)) || any(is.na(names(state_colors))) || any(trimws(names(state_colors)) == "")) {
+    stop("`state_colors` must be named (e.g., c(inactive = '#d7191c', active = '#1a9641')).", call. = FALSE)
+  }
+
+  vals <- as.character(values)
+  vals[is.na(vals) | trimws(vals) == ""] <- "(missing)"
+  levels <- unique(vals)
+
+  named_cols <- stats::setNames(unname(state_colors), tolower(names(state_colors)))
+  if (!("(missing)" %in% names(named_cols))) {
+    named_cols["(missing)"] <- "#808080"
+  }
+
+  assigned <- rep(NA_character_, length(levels))
+  for (i in seq_along(levels)) {
+    key <- tolower(levels[[i]])
+    if (key %in% names(named_cols)) {
+      assigned[[i]] <- named_cols[[key]]
+    }
+  }
+
+  unknown <- which(is.na(assigned))
+  if (length(unknown) > 0L) {
+    assigned[unknown] <- grDevices::hcl.colors(length(unknown), palette = "Dark 3")
+  }
+
+  names(assigned) <- levels
+  list(
+    values = vals,
+    colors = unname(assigned[vals]),
+    legend_labels = names(assigned),
+    legend_colors = unname(assigned)
+  )
+}
+
 grz_select_block_groups <- function(data, block_col, max_blocks, seed) {
   groups <- unique(as.character(data[[block_col]]))
   if (length(groups) <= max_blocks) {
@@ -115,10 +154,13 @@ grz_sample_points_by_block <- function(data, block_col, max_points, seed) {
   data[selected, , drop = FALSE]
 }
 
-grz_validate_map_inputs <- function(data, lon, lat, datetime, block) {
+grz_validate_map_inputs <- function(data, lon, lat, datetime, block, state_col = NULL) {
   needed <- c(lon, lat, datetime)
   if (!is.null(block)) {
     needed <- c(needed, block)
+  }
+  if (!is.null(state_col)) {
+    needed <- c(needed, state_col)
   }
 
   missing <- setdiff(unique(needed), names(data))
@@ -150,6 +192,11 @@ grz_prompt_continue <- function(stop_message) {
 #' @param datetime Name of datetime column.
 #' @param block Deprecated alias for `group`.
 #' @param group Optional grouping column(s) for colour/layer separation.
+#' @param state_col Optional state column for fixed state colouring (for
+#'   example `activity_state_hmm`).
+#' @param state_colors Named colours for state levels. Defaults to red
+#'   (`inactive`) and green (`active`).
+#' @param state_legend_title Legend title used when `state_col` is provided.
 #' @param timeline Logical; if `TRUE`, render points with an interactive time slider.
 #' @param popup_fields Character vector of fields to show in marker popups.
 #' @param provider Tile provider name passed to `leaflet::addProviderTiles()`.
@@ -173,6 +220,9 @@ grz_map <- function(
   datetime = "datetime",
   block = NULL,
   group = NULL,
+  state_col = NULL,
+  state_colors = c(inactive = "#d7191c", active = "#1a9641"),
+  state_legend_title = "State",
   timeline = FALSE,
   popup_fields = c("sensor_id", "datetime"),
   provider = "Esri.WorldImagery",
@@ -218,6 +268,20 @@ grz_map <- function(
     }
     block <- unique(block)
   }
+  if (!is.null(state_col)) {
+    if (!is.character(state_col) || length(state_col) != 1L || is.na(state_col) || trimws(state_col) == "") {
+      stop("`state_col` must be NULL or a single non-empty column name.", call. = FALSE)
+    }
+  }
+  if (!is.character(state_legend_title) || length(state_legend_title) != 1L || is.na(state_legend_title)) {
+    stop("`state_legend_title` must be a single string.", call. = FALSE)
+  }
+  if (!is.character(state_colors) || length(state_colors) < 1L) {
+    stop("`state_colors` must be a named character vector of colours.", call. = FALSE)
+  }
+  if (is.null(names(state_colors)) || any(is.na(names(state_colors))) || any(trimws(names(state_colors)) == "")) {
+    stop("`state_colors` must be named (e.g., c(inactive = '#d7191c', active = '#1a9641')).", call. = FALSE)
+  }
 
   if (!is.null(sample_n) && (!is.numeric(sample_n) || length(sample_n) != 1L || sample_n < 1)) {
     stop("`sample_n` must be NULL or a positive integer.", call. = FALSE)
@@ -258,7 +322,7 @@ grz_map <- function(
     stop("`warnings` must be TRUE or FALSE.", call. = FALSE)
   }
 
-  grz_validate_map_inputs(data, lon = lon, lat = lat, datetime = datetime, block = block)
+  grz_validate_map_inputs(data, lon = lon, lat = lat, datetime = datetime, block = block, state_col = state_col)
 
   dat <- as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
   dat[[lon]] <- suppressWarnings(as.numeric(dat[[lon]]))
@@ -280,11 +344,16 @@ grz_map <- function(
   dat <- dat[order(dat[[datetime]]), , drop = FALSE]
   block_col <- NULL
   block_title <- NULL
+  state_info <- NULL
 
   if (!is.null(block)) {
     dat$.grz_block <- grz_make_block_group(dat, block)
     block_col <- ".grz_block"
     block_title <- paste(block, collapse = " + ")
+  }
+  if (!is.null(state_col)) {
+    state_info <- grz_make_state_palette(dat[[state_col]], state_colors = state_colors)
+    dat$.grz_state <- state_info$values
   }
 
   if (!is.null(max_blocks) && !is.null(block_col)) {
@@ -343,6 +412,9 @@ grz_map <- function(
   }
 
   dat <- dat[order(dat[[datetime]]), , drop = FALSE]
+  if (!is.null(state_col)) {
+    state_info <- grz_make_state_palette(dat$.grz_state, state_colors = state_colors)
+  }
   popup <- grz_make_popup(dat, fields = popup_fields)
 
   map <- leaflet::leaflet(options = leaflet::leafletOptions(preferCanvas = TRUE))
@@ -360,7 +432,18 @@ grz_map <- function(
     sf_dat$time <- format(dat[[datetime]], "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
     sf_dat$.grz_popup <- popup
 
-    if (is.null(block_col)) {
+    if (!is.null(state_col)) {
+      timeline_state <- grz_make_state_palette(sf_dat$.grz_state, state_colors = state_colors)
+      sf_dat$.grz_color <- timeline_state$colors
+      map <- leaflet::addLegend(
+        map,
+        position = "bottomright",
+        colors = timeline_state$legend_colors,
+        labels = timeline_state$legend_labels,
+        title = state_legend_title,
+        opacity = point_opacity
+      )
+    } else if (is.null(block_col)) {
       sf_dat$.grz_color <- "#2b8cbe"
     } else {
       pal <- grz_make_block_palette(sf_dat[[block_col]])
@@ -391,6 +474,25 @@ grz_map <- function(
         maxValue = -1,
         showAllOnStart = TRUE
       )
+    )
+  } else if (!is.null(state_col)) {
+    map <- leaflet::addCircleMarkers(
+      map,
+      lng = dat[[lon]],
+      lat = dat[[lat]],
+      radius = point_radius,
+      stroke = FALSE,
+      fillColor = state_info$colors,
+      fillOpacity = point_opacity,
+      popup = popup
+    )
+    map <- leaflet::addLegend(
+      map,
+      position = "bottomright",
+      colors = state_info$legend_colors,
+      labels = state_info$legend_labels,
+      title = state_legend_title,
+      opacity = point_opacity
     )
   } else if (is.null(block_col)) {
     map <- leaflet::addCircleMarkers(

@@ -78,6 +78,359 @@ grz_quantile_cols <- function(probs) {
   paste0("p", sprintf("%02d", round(probs * 100)))
 }
 
+grz_scale01 <- function(x) {
+  out <- rep(NA_real_, length(x))
+  ok <- is.finite(x)
+  if (!any(ok)) {
+    return(out)
+  }
+  rng <- range(x[ok], na.rm = TRUE)
+  if (!all(is.finite(rng)) || isTRUE(all.equal(rng[[1]], rng[[2]]))) {
+    out[ok] <- 0.5
+    return(out)
+  }
+  out[ok] <- (x[ok] - rng[[1]]) / (rng[[2]] - rng[[1]])
+  out
+}
+
+grz_mixture_intersection <- function(weights, means, sds) {
+  if (length(weights) != 2L || length(means) != 2L || length(sds) != 2L) {
+    return(NA_real_)
+  }
+  if (any(!is.finite(weights)) || any(!is.finite(means)) || any(!is.finite(sds))) {
+    return(NA_real_)
+  }
+  if (any(weights <= 0) || any(sds <= 0)) {
+    return(NA_real_)
+  }
+
+  a <- (1 / (2 * sds[[2]]^2)) - (1 / (2 * sds[[1]]^2))
+  b <- (means[[1]] / (sds[[1]]^2)) - (means[[2]] / (sds[[2]]^2))
+  c <- (means[[2]]^2 / (2 * sds[[2]]^2)) -
+    (means[[1]]^2 / (2 * sds[[1]]^2)) +
+    log((weights[[2]] * sds[[1]]) / (weights[[1]] * sds[[2]]))
+
+  if (abs(a) < 1e-12) {
+    if (abs(b) < 1e-12) {
+      return(NA_real_)
+    }
+    return(-c / b)
+  }
+
+  roots <- polyroot(c(c, b, a))
+  roots <- Re(roots[abs(Im(roots)) < 1e-8])
+  if (length(roots) == 0L) {
+    return(NA_real_)
+  }
+
+  low <- min(means)
+  high <- max(means)
+  inside <- roots[roots >= low & roots <= high]
+  if (length(inside) >= 1L) {
+    return(inside[[1]])
+  }
+
+  roots[[which.min(abs(roots - mean(means)))]]
+}
+
+grz_fit_step_mixture <- function(step_values, max_iter = 250L, tol = 1e-06, seed = 1) {
+  x <- as.numeric(step_values)
+  x <- x[is.finite(x) & x >= 0]
+  n <- length(x)
+  if (n < 20L) {
+    return(NULL)
+  }
+
+  lx <- log1p(x)
+  set.seed(seed)
+  km <- tryCatch(
+    stats::kmeans(lx, centers = 2L, nstart = 5L, iter.max = 100L),
+    error = function(e) NULL
+  )
+  if (is.null(km)) {
+    return(NULL)
+  }
+
+  ord <- order(as.numeric(km$centers))
+  cl <- match(km$cluster, ord)
+  means <- as.numeric(km$centers[ord])
+  weights <- as.numeric(tabulate(cl, nbins = 2L)) / n
+  sds <- vapply(seq_len(2L), function(k) {
+    vals <- lx[cl == k]
+    sd_k <- stats::sd(vals, na.rm = TRUE)
+    if (!is.finite(sd_k) || sd_k < 1e-03) {
+      1e-03
+    } else {
+      sd_k
+    }
+  }, numeric(1))
+
+  ll_prev <- -Inf
+  for (iter in seq_len(as.integer(max_iter))) {
+    d1 <- weights[[1]] * stats::dnorm(lx, mean = means[[1]], sd = sds[[1]])
+    d2 <- weights[[2]] * stats::dnorm(lx, mean = means[[2]], sd = sds[[2]])
+    den <- d1 + d2 + 1e-12
+
+    g1 <- d1 / den
+    g2 <- 1 - g1
+    n1 <- sum(g1)
+    n2 <- sum(g2)
+    if (n1 <= 1e-08 || n2 <= 1e-08) {
+      break
+    }
+
+    weights <- c(n1, n2) / n
+    means <- c(sum(g1 * lx) / n1, sum(g2 * lx) / n2)
+    sds <- c(
+      sqrt(sum(g1 * (lx - means[[1]])^2) / n1),
+      sqrt(sum(g2 * (lx - means[[2]])^2) / n2)
+    )
+    sds[!is.finite(sds) | sds < 1e-03] <- 1e-03
+
+    ll <- sum(log(den))
+    if (is.finite(ll_prev) && abs(ll - ll_prev) < tol) {
+      break
+    }
+    ll_prev <- ll
+  }
+
+  ord <- order(means)
+  means <- means[ord]
+  sds <- sds[ord]
+  weights <- weights[ord]
+
+  cut_log <- grz_mixture_intersection(weights, means, sds)
+  if (!is.finite(cut_log)) {
+    cut_log <- mean(means)
+  }
+
+  list(
+    n = n,
+    weights = as.numeric(weights),
+    means_log = as.numeric(means),
+    sds_log = as.numeric(sds),
+    cutoff_log = as.numeric(cut_log),
+    cutoff_step_m = as.numeric(max(expm1(cut_log), 0))
+  )
+}
+
+grz_logsumexp <- function(x) {
+  x <- as.numeric(x)
+  x <- x[is.finite(x)]
+  if (length(x) == 0L) {
+    return(-Inf)
+  }
+  m <- max(x)
+  m + log(sum(exp(x - m)))
+}
+
+grz_hmm_log_emission_diag <- function(x, means, vars, min_var = 1e-06) {
+  x <- as.matrix(x)
+  means <- as.matrix(means)
+  vars <- as.matrix(vars)
+  n <- nrow(x)
+  k <- nrow(means)
+
+  logb <- matrix(NA_real_, nrow = n, ncol = k)
+  for (s in seq_len(k)) {
+    v <- pmax(as.numeric(vars[s, ]), min_var)
+    z <- sweep(x, 2, as.numeric(means[s, ]), "-")
+    term_const <- -0.5 * sum(log(2 * pi * v))
+    term_quad <- -0.5 * rowSums(sweep(z^2, 2, v, "/"))
+    logb[, s] <- term_const + term_quad
+  }
+  logb
+}
+
+grz_hmm_forward_backward <- function(logb, a, pi) {
+  logb <- as.matrix(logb)
+  a <- as.matrix(a)
+  pi <- as.numeric(pi)
+
+  n <- nrow(logb)
+  k <- ncol(logb)
+  loga <- log(pmax(a, 1e-12))
+  logpi <- log(pmax(pi, 1e-12))
+
+  log_alpha <- matrix(-Inf, nrow = n, ncol = k)
+  log_beta <- matrix(-Inf, nrow = n, ncol = k)
+
+  log_alpha[1, ] <- logpi + logb[1, ]
+  if (n >= 2L) {
+    for (t in 2:n) {
+      for (s in seq_len(k)) {
+        log_alpha[t, s] <- logb[t, s] + grz_logsumexp(log_alpha[t - 1, ] + loga[, s])
+      }
+    }
+  }
+
+  loglik <- grz_logsumexp(log_alpha[n, ])
+
+  log_beta[n, ] <- 0
+  if (n >= 2L) {
+    for (t in (n - 1L):1L) {
+      for (s in seq_len(k)) {
+        log_beta[t, s] <- grz_logsumexp(loga[s, ] + logb[t + 1L, ] + log_beta[t + 1L, ])
+      }
+    }
+  }
+
+  log_gamma <- log_alpha + log_beta - loglik
+  gamma <- exp(log_gamma)
+  gamma <- gamma / rowSums(gamma)
+
+  xi_sum <- matrix(0, nrow = k, ncol = k)
+  if (n >= 2L) {
+    for (t in 1:(n - 1L)) {
+      mat <- outer(log_alpha[t, ], rep(1, k)) +
+        loga +
+        matrix(rep(logb[t + 1L, ] + log_beta[t + 1L, ], each = k), nrow = k)
+      denom <- grz_logsumexp(as.vector(mat))
+      xi_sum <- xi_sum + exp(mat - denom)
+    }
+  }
+
+  list(logLik = loglik, gamma = gamma, xi_sum = xi_sum)
+}
+
+grz_hmm_viterbi <- function(logb, a, pi) {
+  logb <- as.matrix(logb)
+  a <- as.matrix(a)
+  pi <- as.numeric(pi)
+
+  n <- nrow(logb)
+  k <- ncol(logb)
+  loga <- log(pmax(a, 1e-12))
+  logpi <- log(pmax(pi, 1e-12))
+
+  delta <- matrix(-Inf, nrow = n, ncol = k)
+  psi <- matrix(1L, nrow = n, ncol = k)
+
+  delta[1, ] <- logpi + logb[1, ]
+  if (n >= 2L) {
+    for (t in 2:n) {
+      for (s in seq_len(k)) {
+        vals <- delta[t - 1L, ] + loga[, s]
+        idx <- which.max(vals)
+        delta[t, s] <- vals[idx] + logb[t, s]
+        psi[t, s] <- as.integer(idx)
+      }
+    }
+  }
+
+  path <- integer(n)
+  path[n] <- as.integer(which.max(delta[n, ]))
+  if (n >= 2L) {
+    for (t in (n - 1L):1L) {
+      path[t] <- psi[t + 1L, path[t + 1L]]
+    }
+  }
+
+  list(path = path, logprob = max(delta[n, ]))
+}
+
+grz_hmm_fit_diag <- function(
+  x,
+  n_states = 2L,
+  max_iter = 100L,
+  tol = 1e-04,
+  min_var = 1e-04,
+  transition_prior = 1,
+  self_transition_prior = 5,
+  seed = 1
+) {
+  x <- as.matrix(x)
+  n <- nrow(x)
+  d <- ncol(x)
+  if (n < max(20L, n_states * 5L)) {
+    stop("Not enough rows for HMM fit.", call. = FALSE)
+  }
+  if (d < 1L) {
+    stop("HMM feature matrix must have at least one column.", call. = FALSE)
+  }
+
+  set.seed(seed)
+  km <- tryCatch(
+    stats::kmeans(x, centers = n_states, nstart = 5L, iter.max = 100L),
+    error = function(e) NULL
+  )
+
+  if (is.null(km)) {
+    cl <- sample.int(n_states, n, replace = TRUE)
+  } else {
+    cl <- as.integer(km$cluster)
+  }
+
+  means <- matrix(NA_real_, nrow = n_states, ncol = d)
+  vars <- matrix(NA_real_, nrow = n_states, ncol = d)
+  for (s in seq_len(n_states)) {
+    idx <- which(cl == s)
+    if (length(idx) < 2L) {
+      idx <- sample.int(n, min(20L, n), replace = TRUE)
+    }
+    means[s, ] <- colMeans(x[idx, , drop = FALSE], na.rm = TRUE)
+    v <- apply(x[idx, , drop = FALSE], 2, stats::var, na.rm = TRUE)
+    v[!is.finite(v) | v < min_var] <- min_var
+    vars[s, ] <- v
+  }
+
+  if (n_states == 1L) {
+    a <- matrix(1, nrow = 1L, ncol = 1L)
+  } else {
+    off <- (1 - 0.95) / (n_states - 1)
+    a <- matrix(off, nrow = n_states, ncol = n_states)
+    diag(a) <- 0.95
+  }
+  pi <- rep(1 / n_states, n_states)
+
+  prior_mat <- matrix(transition_prior, nrow = n_states, ncol = n_states)
+  diag(prior_mat) <- self_transition_prior
+
+  ll_trace <- numeric(0)
+  ll_prev <- -Inf
+  iter_used <- 0L
+
+  for (iter in seq_len(as.integer(max_iter))) {
+    logb <- grz_hmm_log_emission_diag(x, means, vars, min_var = min_var)
+    fb <- grz_hmm_forward_backward(logb, a, pi)
+    gamma <- fb$gamma
+    nk <- colSums(gamma) + 1e-08
+
+    pi <- gamma[1, ]
+    pi <- pi / sum(pi)
+
+    a_num <- fb$xi_sum + prior_mat
+    a <- a_num / rowSums(a_num)
+
+    for (s in seq_len(n_states)) {
+      w <- gamma[, s]
+      means[s, ] <- colSums(x * w) / nk[s]
+      centered <- sweep(x, 2, means[s, ], "-")
+      v <- colSums(centered^2 * w) / nk[s]
+      v[!is.finite(v) | v < min_var] <- min_var
+      vars[s, ] <- v
+    }
+
+    ll <- fb$logLik
+    ll_trace <- c(ll_trace, ll)
+    iter_used <- iter
+    if (is.finite(ll_prev) && abs(ll - ll_prev) < tol) {
+      break
+    }
+    ll_prev <- ll
+  }
+
+  list(
+    pi = as.numeric(pi),
+    a = a,
+    means = means,
+    vars = vars,
+    logLik = as.numeric(tail(ll_trace, 1L)),
+    ll_trace = ll_trace,
+    iterations = iter_used
+  )
+}
+
 #' Plot diurnal heatmaps for key movement metrics
 #'
 #' Creates cohort/group-level diurnal heatmaps to support threshold tuning
@@ -216,9 +569,14 @@ grz_plot_diurnal_metrics <- function(
 #' @param probs Quantile probabilities used in summary tables.
 #' @param max_points_plot Maximum points used in density plot subsample.
 #' @param seed Random seed used for plotting subsample.
+#' @param include_tuning Logical; run threshold tuning diagnostics.
+#' @param tuning_rest_step_grid Candidate `rest_step_max` values for tuning.
+#' @param tuning_rest_speed_grid Candidate `rest_speed_max` values for tuning.
+#' @param tuning_max_rows Maximum rows used in tuning sweep.
 #' @param return_class Output class for returned tables.
 #'
-#' @return A list with `overall`, `hourly`, and `plots` (ggplot objects).
+#' @return A list with `overall`, `hourly`, `plots` (ggplot objects), and
+#'   optional `tuning` diagnostics.
 #' @export
 grz_behavior_threshold_guide <- function(
   data,
@@ -228,6 +586,10 @@ grz_behavior_threshold_guide <- function(
   probs = c(0.10, 0.25, 0.50, 0.75, 0.90),
   max_points_plot = 150000L,
   seed = 1,
+  include_tuning = TRUE,
+  tuning_rest_step_grid = seq(3, 12, by = 1),
+  tuning_rest_speed_grid = seq(0.03, 0.09, by = 0.02),
+  tuning_max_rows = 25000L,
   return_class = c("data.frame", "data.table")
 ) {
   grz_require_ggplot2("grz_behavior_threshold_guide()")
@@ -298,11 +660,24 @@ grz_behavior_threshold_guide <- function(
     long_plot <- long_plot[sample.int(nrow(long_plot), as.integer(max_points_plot))]
   }
 
+  # Keep step-distance boxplots on a comparable visual range.
+  long_plot_box <- data.table::copy(long_plot)
+  long_plot_box[.grz_metric == "step_m" & .grz_value > 3000, .grz_value := 3000]
+
+  box_axis_anchor <- unique(long_plot_box[.grz_metric == "step_m", .(.grz_metric, .grz_cohort)])
+  if (nrow(box_axis_anchor) > 0L) {
+    box_axis_anchor[, `:=`(.grz_hour = 0L, .grz_value = 3000)]
+  }
+
   p_box <- ggplot2::ggplot(
-    long_plot,
+    long_plot_box,
     ggplot2::aes(x = factor(.grz_hour), y = .grz_value)
   ) +
     ggplot2::geom_boxplot(outlier.alpha = 0.05, linewidth = 0.2) +
+    ggplot2::geom_blank(
+      data = box_axis_anchor,
+      ggplot2::aes(x = factor(.grz_hour), y = .grz_value)
+    ) +
     ggplot2::facet_grid(.grz_metric ~ .grz_cohort, scales = "free_y") +
     ggplot2::labs(
       x = paste0("Hour (", tz_local, ")"),
@@ -347,6 +722,22 @@ grz_behavior_threshold_guide <- function(
   data.table::setnames(overall, c(".grz_cohort", ".grz_metric"), c("cohort", "metric"))
   data.table::setnames(hourly, c(".grz_cohort", ".grz_metric", ".grz_hour"), c("cohort", "metric", "hour"))
 
+  tuning <- NULL
+  if (isTRUE(include_tuning)) {
+    tuning <- grz_tune_thresholds(
+      data = dt,
+      cohort_col = cohort_col,
+      tz_local = tz_local,
+      rest_step_grid = tuning_rest_step_grid,
+      rest_speed_grid = tuning_rest_speed_grid,
+      max_rows = tuning_max_rows,
+      max_points_plot = max_points_plot,
+      seed = seed,
+      return_class = rc,
+      verbose = FALSE
+    )
+  }
+
   list(
     overall = grz_as_output(overall, rc),
     hourly = grz_as_output(hourly, rc),
@@ -354,8 +745,805 @@ grz_behavior_threshold_guide <- function(
       hourly_boxplot = p_box,
       hourly_band = p_band,
       density = p_density
+    ),
+    tuning = tuning
+  )
+}
+
+#' Tune idle/graze thresholds with clearer diagnostics
+#'
+#' Builds practical threshold-tuning outputs for `rest` vs `graze` separation:
+#' a data-driven starting cutoff from a two-component mixture on `log1p(step_m)`,
+#' a threshold sweep score surface, and visual diagnostics.
+#'
+#' @param data Input data containing GPS rows.
+#' @param groups Group columns used for transitions and bout calculations.
+#' @param cohort_col Optional cohort column for faceting.
+#' @param tz_local Time zone used to derive hour-of-day.
+#' @param step_col Step-distance column (m).
+#' @param speed_col Speed column (m/s).
+#' @param turn_col Turn-angle column (radians).
+#' @param rest_step_grid Candidate `rest_step_max` values for sweep.
+#' @param rest_speed_grid Candidate `rest_speed_max` values for sweep.
+#' @param graze_speed_max Passed into classification rule during sweep.
+#' @param travel_speed_min Passed into classification rule during sweep.
+#' @param travel_turn_max Passed into classification rule during sweep.
+#' @param min_run_n Run smoothing threshold used during sweep.
+#' @param short_bout_mins Bout duration threshold for instability metric.
+#' @param night_hours Night hours used for night-rest metric.
+#' @param max_rows Maximum rows used in threshold sweep (sampled if needed).
+#' @param max_points_plot Maximum points used for density/CDF plots.
+#' @param seed Random seed for reproducible subsampling.
+#' @param verbose Logical; print sweep summary.
+#' @param return_class Output class for returned tables.
+#'
+#' @return A list with `suggested`, `sweep`, `best`, `mixture`, and `plots`.
+#' @export
+grz_tune_thresholds <- function(
+  data,
+  groups = NULL,
+  cohort_col = NULL,
+  tz_local = "UTC",
+  step_col = "step_m",
+  speed_col = "speed_mps",
+  turn_col = "turn_rad",
+  rest_step_grid = seq(3, 12, by = 1),
+  rest_speed_grid = seq(0.03, 0.09, by = 0.02),
+  graze_speed_max = 0.60,
+  travel_speed_min = 0.60,
+  travel_turn_max = 0.60,
+  min_run_n = 2L,
+  short_bout_mins = 10,
+  night_hours = c(20:23, 0:5),
+  max_rows = 25000L,
+  max_points_plot = 150000L,
+  seed = 1,
+  verbose = TRUE,
+  return_class = c("data.frame", "data.table")
+) {
+  grz_require_ggplot2("grz_tune_thresholds()")
+  rc <- grz_match_output_class(return_class)
+
+  prep <- grz_behavior_prepare_dt(data, groups = groups, ensure_features = TRUE)
+  dt <- prep$data
+  grp <- prep$groups
+
+  grz_require_cols(dt, c("datetime", step_col, speed_col, turn_col), fun_name = "grz_tune_thresholds()")
+
+  if (!is.numeric(rest_step_grid) || length(rest_step_grid) < 1L || any(!is.finite(rest_step_grid)) || any(rest_step_grid <= 0)) {
+    stop("`rest_step_grid` must be positive numeric values.", call. = FALSE)
+  }
+  if (!is.numeric(rest_speed_grid) || length(rest_speed_grid) < 1L || any(!is.finite(rest_speed_grid)) || any(rest_speed_grid <= 0)) {
+    stop("`rest_speed_grid` must be positive numeric values.", call. = FALSE)
+  }
+  if (!is.numeric(min_run_n) || length(min_run_n) != 1L || min_run_n < 1) {
+    stop("`min_run_n` must be a positive integer.", call. = FALSE)
+  }
+
+  night_hours <- sort(unique(as.integer(night_hours)))
+  night_hours <- night_hours[night_hours >= 0L & night_hours <= 23L]
+  if (length(night_hours) == 0L) {
+    stop("`night_hours` must include values between 0 and 23.", call. = FALSE)
+  }
+
+  dt <- dt[is.finite(get(step_col)) & is.finite(get(speed_col)) & !is.na(datetime)]
+  if (nrow(dt) < 20L) {
+    stop("Not enough valid rows for threshold tuning.", call. = FALSE)
+  }
+
+  if (is.null(cohort_col)) {
+    dt[, .grz_cohort := "all"]
+  } else {
+    if (!cohort_col %in% names(dt)) {
+      stop("`cohort_col` not found in data: ", cohort_col, call. = FALSE)
+    }
+    dt[, .grz_cohort := as.character(get(cohort_col))]
+  }
+  dt[, .grz_hour := as.integer(strftime(datetime, format = "%H", tz = tz_local))]
+  dt[, .grz_period := data.table::fifelse(.grz_hour %in% night_hours, "night", "day")]
+
+  step_vals <- dt[[step_col]]
+  mix_fit <- grz_fit_step_mixture(step_vals, seed = seed)
+  if (is.null(mix_fit)) {
+    stop("Unable to fit threshold mixture model for step distance.", call. = FALSE)
+  }
+
+  plot_dt <- dt[, .(step_m = get(step_col), .grz_period, .grz_cohort)]
+  if (nrow(plot_dt) > as.integer(max_points_plot)) {
+    set.seed(seed)
+    plot_dt <- plot_dt[sample.int(nrow(plot_dt), as.integer(max_points_plot))]
+  }
+
+  q99 <- stats::quantile(plot_dt$step_m, probs = 0.99, na.rm = TRUE, names = FALSE, type = 7)
+  x_upper <- if (is.finite(q99) && q99 > 0) q99 else max(plot_dt$step_m, na.rm = TRUE)
+
+  p_density <- ggplot2::ggplot(
+    plot_dt,
+    ggplot2::aes(x = step_m, color = .grz_period, fill = .grz_period)
+  ) +
+    ggplot2::geom_density(alpha = 0.25) +
+    ggplot2::geom_vline(xintercept = mix_fit$cutoff_step_m, linetype = "dashed", color = "black") +
+    ggplot2::coord_cartesian(xlim = c(0, x_upper)) +
+    ggplot2::facet_wrap(~.grz_cohort, scales = "free_y") +
+    ggplot2::labs(
+      x = "Step distance (m)",
+      y = "Density",
+      color = "Period",
+      fill = "Period",
+      title = "Step Distance Density with Suggested Idle/Graze Cutoff",
+      subtitle = paste0("Dashed line = mixture cutoff (", round(mix_fit$cutoff_step_m, 2), " m)")
+    ) +
+    ggplot2::theme_minimal()
+
+  p_cdf <- ggplot2::ggplot(
+    plot_dt,
+    ggplot2::aes(x = step_m, color = .grz_period)
+  ) +
+    ggplot2::stat_ecdf(geom = "step") +
+    ggplot2::geom_vline(xintercept = mix_fit$cutoff_step_m, linetype = "dashed", color = "black") +
+    ggplot2::coord_cartesian(xlim = c(0, x_upper)) +
+    ggplot2::facet_wrap(~.grz_cohort) +
+    ggplot2::labs(
+      x = "Step distance (m)",
+      y = "Empirical CDF",
+      color = "Period",
+      title = "Step Distance CDF by Period"
+    ) +
+    ggplot2::theme_minimal()
+
+  dt_sweep <- dt[, c(grp, "datetime", ".grz_hour", step_col, speed_col, turn_col), with = FALSE]
+  if (nrow(dt_sweep) > as.integer(max_rows)) {
+    set.seed(seed + 1L)
+    dt_sweep <- dt_sweep[sample.int(nrow(dt_sweep), as.integer(max_rows))]
+    data.table::setorderv(dt_sweep, c(grp, "datetime"))
+  }
+
+  grid <- data.table::CJ(
+    rest_step_max = sort(unique(as.numeric(rest_step_grid))),
+    rest_speed_max = sort(unique(as.numeric(rest_speed_grid)))
+  )
+
+  sweep_eval <- function(rest_step_max, rest_speed_max) {
+    tmp <- data.table::copy(dt_sweep)
+    tmp[, .grz_state := data.table::fifelse(
+      is.na(get(speed_col)),
+      NA_character_,
+      data.table::fifelse(
+        get(speed_col) <= rest_speed_max & (is.na(get(step_col)) | get(step_col) <= rest_step_max),
+        "rest",
+        data.table::fifelse(
+          get(speed_col) >= travel_speed_min & (is.na(get(turn_col)) | abs(get(turn_col)) <= travel_turn_max),
+          "travel",
+          data.table::fifelse(get(speed_col) <= graze_speed_max, "graze", "travel")
+        )
+      )
+    )]
+
+    if (as.integer(min_run_n) > 1L) {
+      tmp[, .grz_state := grz_smooth_state_runs(.grz_state, min_run_n = as.integer(min_run_n)), by = grp]
+    }
+
+    tmp[, .grz_prev_state := data.table::shift(.grz_state), by = grp]
+    trans <- tmp[!is.na(.grz_state) & !is.na(.grz_prev_state), mean(.grz_state != .grz_prev_state)]
+    trans <- if (is.finite(trans)) trans * 1000 else NA_real_
+
+    night_mask <- tmp$.grz_hour %in% night_hours
+    night_rest <- if (any(night_mask)) {
+      tmp[night_mask, mean(.grz_state == "rest", na.rm = TRUE)]
+    } else {
+      NA_real_
+    }
+
+    bout_dt <- tmp[, c(grp, "datetime", ".grz_state"), with = FALSE]
+    bouts <- grz_behavior_bouts(bout_dt, state_col = ".grz_state", groups = grp)
+    short_bout_prop <- if (nrow(bouts) > 0L) {
+      mean(bouts$duration_mins <= short_bout_mins, na.rm = TRUE)
+    } else {
+      NA_real_
+    }
+
+    data.table::data.table(
+      rest_step_max = rest_step_max,
+      rest_speed_max = rest_speed_max,
+      transition_per_1000 = trans,
+      short_bout_prop = short_bout_prop,
+      night_rest_prop = night_rest
+    )
+  }
+
+  sweep <- data.table::rbindlist(
+    lapply(seq_len(nrow(grid)), function(i) {
+      sweep_eval(
+        rest_step_max = grid$rest_step_max[[i]],
+        rest_speed_max = grid$rest_speed_max[[i]]
+      )
+    }),
+    use.names = TRUE,
+    fill = TRUE
+  )
+
+  sweep[, score := grz_scale01(transition_per_1000) +
+    grz_scale01(short_bout_prop) +
+    (1 - grz_scale01(night_rest_prop))]
+  sweep[!is.finite(score), score := NA_real_]
+
+  best <- sweep[which.min(score)][1]
+  if (nrow(best) == 0L || !is.finite(best$score[[1]])) {
+    best <- sweep[order(rest_step_max, rest_speed_max)][1]
+  }
+
+  suggested <- data.table::data.table(
+    method = c("mixture_step_cutoff", "sweep_best"),
+    rest_step_max = c(mix_fit$cutoff_step_m, best$rest_step_max[[1]]),
+    rest_speed_max = c(NA_real_, best$rest_speed_max[[1]]),
+    score = c(NA_real_, best$score[[1]])
+  )
+
+  p_sweep <- ggplot2::ggplot(
+    sweep,
+    ggplot2::aes(x = rest_step_max, y = rest_speed_max, fill = score)
+  ) +
+    ggplot2::geom_tile() +
+    ggplot2::geom_point(
+      data = best,
+      ggplot2::aes(x = rest_step_max, y = rest_speed_max),
+      inherit.aes = FALSE,
+      shape = 21,
+      fill = "white",
+      color = "black",
+      size = 3
+    ) +
+    ggplot2::scale_fill_gradient(
+      low = "green",
+      high = "red",
+      na.value = "grey85"
+    ) +
+    ggplot2::labs(
+      x = "rest_step_max (m)",
+      y = "rest_speed_max (m/s)",
+      fill = "Score",
+      title = "Threshold Sweep Score Surface",
+      subtitle = "Lower score is better (fewer transitions, fewer short bouts, more night rest)"
+    ) +
+    ggplot2::theme_minimal()
+
+  if (isTRUE(verbose)) {
+    cat(
+      sprintf(
+        "[tune_thresholds] mixture_step=%.2f best_step=%.2f best_speed=%.3f score=%.3f grid=%s rows=%s\n",
+        mix_fit$cutoff_step_m,
+        best$rest_step_max[[1]],
+        best$rest_speed_max[[1]],
+        best$score[[1]],
+        format(nrow(grid), big.mark = ","),
+        format(nrow(dt_sweep), big.mark = ",")
+      )
+    )
+  }
+
+  list(
+    suggested = grz_as_output(suggested, rc),
+    sweep = grz_as_output(sweep, rc),
+    best = grz_as_output(best, rc),
+    mixture = mix_fit,
+    plots = list(
+      step_density = p_density,
+      step_cdf = p_cdf,
+      sweep_score = p_sweep
     )
   )
+}
+
+#' Classify Active/Inactive States Using HMM
+#'
+#' Fits a 2-state Gaussian HMM on transformed movement features and decodes
+#' each track into `inactive`/`active` states. This is useful when simple
+#' thresholding is unstable due to GPS jitter in low-movement periods.
+#'
+#' @param data Input GPS data.
+#' @param groups Grouping columns used for track-wise decoding.
+#' @param step_col Step-distance column (meters).
+#' @param turn_col Turn-angle column (radians).
+#' @param state_col Output state column name.
+#' @param state_id_col Output numeric state id column.
+#' @param inactive_prob_col Output posterior probability column for inactive
+#'   state.
+#' @param fit_max_rows Maximum rows used to fit the HMM (sampled if needed).
+#' @param max_iter Maximum EM iterations.
+#' @param tol EM convergence tolerance on log-likelihood.
+#' @param min_var Minimum per-state feature variance for numerical stability.
+#' @param min_run_n Optional run-length smoothing threshold.
+#' @param seed Random seed for reproducible fitting/subsampling.
+#' @param verbose Logical; print summary output.
+#' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
+#'
+#' @return Input data with appended HMM activity columns.
+#' @export
+grz_classify_activity_hmm <- function(
+  data,
+  groups = NULL,
+  step_col = "step_m",
+  turn_col = "turn_rad",
+  state_col = "activity_state_hmm",
+  state_id_col = "activity_state_id_hmm",
+  inactive_prob_col = "inactive_prob_hmm",
+  fit_max_rows = 200000L,
+  max_iter = 100L,
+  tol = 1e-04,
+  min_var = 1e-04,
+  min_run_n = 2L,
+  seed = 1,
+  verbose = TRUE,
+  return_class = c("data.frame", "data.table")
+) {
+  rc <- grz_match_output_class(return_class)
+  if (!is.character(state_col) || length(state_col) != 1L || trimws(state_col) == "") {
+    stop("`state_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.character(state_id_col) || length(state_id_col) != 1L || trimws(state_id_col) == "") {
+    stop("`state_id_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.character(inactive_prob_col) || length(inactive_prob_col) != 1L || trimws(inactive_prob_col) == "") {
+    stop("`inactive_prob_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.numeric(fit_max_rows) || length(fit_max_rows) != 1L || fit_max_rows < 100) {
+    stop("`fit_max_rows` must be a number >= 100.", call. = FALSE)
+  }
+  if (!is.numeric(min_run_n) || length(min_run_n) != 1L || min_run_n < 1) {
+    stop("`min_run_n` must be a positive integer.", call. = FALSE)
+  }
+
+  prep <- grz_behavior_prepare_dt(data, groups = groups, ensure_features = TRUE)
+  dt <- prep$data
+  grp <- prep$groups
+  grz_require_cols(dt, c("datetime", step_col, turn_col), fun_name = "grz_classify_activity_hmm()")
+
+  dt[, .grz_step := suppressWarnings(as.numeric(get(step_col)))]
+  dt[, .grz_turn := suppressWarnings(as.numeric(get(turn_col)))]
+  valid <- is.finite(dt$.grz_step) & dt$.grz_step >= 0 & is.finite(dt$.grz_turn) & !is.na(dt$datetime)
+
+  n_valid <- sum(valid)
+  if (n_valid < 50L) {
+    stop("Not enough valid rows for HMM classification.", call. = FALSE)
+  }
+
+  fit_idx <- which(valid)
+  if (length(fit_idx) > as.integer(fit_max_rows)) {
+    set.seed(seed)
+    fit_idx <- sample(fit_idx, as.integer(fit_max_rows))
+  }
+
+  x_fit <- as.matrix(dt[fit_idx, .(log1p(.grz_step), abs(.grz_turn))])
+  model <- grz_hmm_fit_diag(
+    x = x_fit,
+    n_states = 2L,
+    max_iter = as.integer(max_iter),
+    tol = tol,
+    min_var = min_var,
+    seed = seed
+  )
+
+  inactive_id <- as.integer(which.min(model$means[, 1L]))
+  active_id <- as.integer(setdiff(seq_len(nrow(model$means)), inactive_id)[1L])
+  state_by_id <- rep(NA_character_, 2L)
+  state_by_id[inactive_id] <- "inactive"
+  state_by_id[active_id] <- "active"
+
+  dt[, (state_col) := NA_character_]
+  dt[, (state_id_col) := NA_integer_]
+  dt[, (inactive_prob_col) := NA_real_]
+
+  g <- interaction(dt[, ..grp], drop = TRUE, lex.order = TRUE)
+  split_idx <- split(seq_len(nrow(dt)), g)
+
+  for (idx_all in split_idx) {
+    idx <- idx_all[valid[idx_all]]
+    if (length(idx) == 0L) {
+      next
+    }
+
+    xg <- as.matrix(dt[idx, .(log1p(.grz_step), abs(.grz_turn))])
+    logb <- grz_hmm_log_emission_diag(xg, model$means, model$vars, min_var = min_var)
+    fb <- grz_hmm_forward_backward(logb, model$a, model$pi)
+    vit <- grz_hmm_viterbi(logb, model$a, model$pi)
+
+    sid <- as.integer(vit$path)
+    dt[idx, (state_id_col) := sid]
+    dt[idx, (state_col) := state_by_id[sid]]
+    dt[idx, (inactive_prob_col) := fb$gamma[, inactive_id]]
+  }
+
+  if (as.integer(min_run_n) > 1L) {
+    dt[!is.na(get(state_col)), (state_col) := grz_smooth_state_runs(get(state_col), min_run_n = as.integer(min_run_n)), by = grp]
+    dt[get(state_col) == "inactive", (state_id_col) := inactive_id]
+    dt[get(state_col) == "active", (state_id_col) := active_id]
+  }
+
+  state_counts <- dt[, .N, by = state_col][order(-N)]
+  n_inactive <- state_counts[get(state_col) == "inactive", N]
+  n_active <- state_counts[get(state_col) == "active", N]
+  n_inactive <- if (length(n_inactive) == 0L) 0L else as.integer(n_inactive[[1L]])
+  n_active <- if (length(n_active) == 0L) 0L else as.integer(n_active[[1L]])
+
+  attr(dt, "hmm_activity_model") <- list(
+    features = c(step_col, turn_col),
+    transforms = c("log1p", "abs"),
+    state_map = data.frame(
+      state_id = c(inactive_id, active_id),
+      state = c("inactive", "active"),
+      stringsAsFactors = FALSE
+    ),
+    pi = model$pi,
+    transition = model$a,
+    means = model$means,
+    vars = model$vars,
+    logLik = model$logLik,
+    iterations = model$iterations
+  )
+
+  if (isTRUE(verbose)) {
+    step_centers <- pmax(expm1(model$means[, 1L]), 0)
+    turn_centers <- model$means[, 2L]
+    cat(
+      sprintf(
+        "[classify_activity_hmm] valid=%s inactive=%s active=%s center_step_m(inactive)=%.2f center_step_m(active)=%.2f center_abs_turn(inactive)=%.3f center_abs_turn(active)=%.3f\n",
+        format(n_valid, big.mark = ","),
+        format(n_inactive, big.mark = ","),
+        format(n_active, big.mark = ","),
+        step_centers[inactive_id],
+        step_centers[active_id],
+        turn_centers[inactive_id],
+        turn_centers[active_id]
+      )
+    )
+  }
+
+  dt[, c(".grz_step", ".grz_turn") := NULL]
+  grz_as_output(dt, rc)
+}
+
+grz_spatial_staypoint_track <- function(
+  lon,
+  lat,
+  datetime,
+  radius_m = 20,
+  min_dwell_mins = 20,
+  min_points = 3L,
+  max_gap_mins = 60
+) {
+  n <- length(lon)
+  state <- rep("active", n)
+  cluster <- rep(NA_integer_, n)
+  dwell <- rep(NA_real_, n)
+
+  if (n == 0L) {
+    return(list(state = state, cluster = cluster, dwell = dwell))
+  }
+
+  cid <- 0L
+  i <- 1L
+
+  while (i <= n) {
+    if (!is.finite(lon[[i]]) || !is.finite(lat[[i]]) || is.na(datetime[[i]])) {
+      i <- i + 1L
+      next
+    }
+
+    j <- i
+    center_lon <- lon[[i]]
+    center_lat <- lat[[i]]
+    n_center <- 1L
+
+    while (j < n) {
+      k <- j + 1L
+      if (!is.finite(lon[[k]]) || !is.finite(lat[[k]]) || is.na(datetime[[k]])) {
+        break
+      }
+      gap_mins <- as.numeric(datetime[[k]] - datetime[[j]], units = "mins")
+      if (!is.finite(gap_mins) || gap_mins > max_gap_mins) {
+        break
+      }
+
+      d <- grz_haversine_m(center_lon, center_lat, lon[[k]], lat[[k]])
+      if (!is.finite(d) || d > radius_m) {
+        break
+      }
+
+      n_center <- n_center + 1L
+      center_lon <- center_lon + (lon[[k]] - center_lon) / n_center
+      center_lat <- center_lat + (lat[[k]] - center_lat) / n_center
+      j <- k
+    }
+
+    npts <- j - i + 1L
+    dwell_mins <- as.numeric(datetime[[j]] - datetime[[i]], units = "mins")
+    if (npts >= as.integer(min_points) && is.finite(dwell_mins) && dwell_mins >= min_dwell_mins) {
+      cid <- cid + 1L
+      state[i:j] <- "inactive"
+      cluster[i:j] <- cid
+      dwell[i:j] <- dwell_mins
+      i <- j + 1L
+    } else {
+      i <- i + 1L
+    }
+  }
+
+  list(state = state, cluster = cluster, dwell = dwell)
+}
+
+#' Classify Active/Inactive States Using Spatial Clustering
+#'
+#' Detects inactive bouts using a staypoint-style spatial clustering approach:
+#' consecutive points that remain within a radius for at least a minimum dwell
+#' time are labelled `inactive`; other points are `active`.
+#'
+#' @param data Input GPS data.
+#' @param groups Grouping columns used for per-track clustering.
+#' @param state_col Output state column name.
+#' @param cluster_col Output cluster id column name.
+#' @param dwell_col Output dwell duration column name (minutes).
+#' @param radius_m Spatial radius for cluster membership (meters).
+#' @param min_dwell_mins Minimum dwell time for an inactive cluster.
+#' @param min_points Minimum consecutive points required in a cluster.
+#' @param max_gap_mins Maximum allowed gap between consecutive fixes within a
+#'   cluster.
+#' @param min_run_n Optional run-length smoothing threshold.
+#' @param verbose Logical; print summary output.
+#' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
+#'
+#' @return Input data with appended spatial activity columns.
+#' @export
+grz_classify_activity_spatial <- function(
+  data,
+  groups = NULL,
+  state_col = "activity_state_spatial",
+  cluster_col = "activity_cluster_spatial",
+  dwell_col = "activity_dwell_mins_spatial",
+  radius_m = 20,
+  min_dwell_mins = 20,
+  min_points = 3L,
+  max_gap_mins = 60,
+  min_run_n = 1L,
+  verbose = TRUE,
+  return_class = c("data.frame", "data.table")
+) {
+  rc <- grz_match_output_class(return_class)
+  if (!is.character(state_col) || length(state_col) != 1L || trimws(state_col) == "") {
+    stop("`state_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.character(cluster_col) || length(cluster_col) != 1L || trimws(cluster_col) == "") {
+    stop("`cluster_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.character(dwell_col) || length(dwell_col) != 1L || trimws(dwell_col) == "") {
+    stop("`dwell_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.numeric(radius_m) || length(radius_m) != 1L || radius_m <= 0) {
+    stop("`radius_m` must be a positive number.", call. = FALSE)
+  }
+  if (!is.numeric(min_dwell_mins) || length(min_dwell_mins) != 1L || min_dwell_mins <= 0) {
+    stop("`min_dwell_mins` must be a positive number.", call. = FALSE)
+  }
+  if (!is.numeric(min_points) || length(min_points) != 1L || min_points < 2) {
+    stop("`min_points` must be an integer >= 2.", call. = FALSE)
+  }
+  if (!is.numeric(max_gap_mins) || length(max_gap_mins) != 1L || max_gap_mins <= 0) {
+    stop("`max_gap_mins` must be a positive number.", call. = FALSE)
+  }
+  if (!is.numeric(min_run_n) || length(min_run_n) != 1L || min_run_n < 1) {
+    stop("`min_run_n` must be a positive integer.", call. = FALSE)
+  }
+
+  prep <- grz_behavior_prepare_dt(data, groups = groups, ensure_features = FALSE)
+  dt <- prep$data
+  grp <- prep$groups
+
+  dt[, (state_col) := NA_character_]
+  dt[, (cluster_col) := NA_integer_]
+  dt[, (dwell_col) := NA_real_]
+
+  dt[, c(state_col, cluster_col, dwell_col) := {
+    res <- grz_spatial_staypoint_track(
+      lon = lon,
+      lat = lat,
+      datetime = datetime,
+      radius_m = radius_m,
+      min_dwell_mins = min_dwell_mins,
+      min_points = as.integer(min_points),
+      max_gap_mins = max_gap_mins
+    )
+    list(res$state, res$cluster, res$dwell)
+  }, by = grp]
+
+  if (as.integer(min_run_n) > 1L) {
+    dt[!is.na(get(state_col)), (state_col) := grz_smooth_state_runs(get(state_col), min_run_n = as.integer(min_run_n)), by = grp]
+  }
+
+  counts <- dt[, .N, by = state_col][order(-N)]
+  n_inactive <- counts[get(state_col) == "inactive", N]
+  n_active <- counts[get(state_col) == "active", N]
+  n_inactive <- if (length(n_inactive) == 0L) 0L else as.integer(n_inactive[[1L]])
+  n_active <- if (length(n_active) == 0L) 0L else as.integer(n_active[[1L]])
+  n_clusters <- dt[!is.na(get(cluster_col)), uniqueN(get(cluster_col)), by = grp][, sum(V1)]
+
+  if (isTRUE(verbose)) {
+    cat(
+      sprintf(
+        "[classify_activity_spatial] inactive=%s active=%s clusters=%s radius_m=%.1f min_dwell_mins=%.1f\n",
+        format(n_inactive, big.mark = ","),
+        format(n_active, big.mark = ","),
+        format(n_clusters, big.mark = ","),
+        radius_m,
+        min_dwell_mins
+      )
+    )
+  }
+
+  grz_as_output(dt, rc)
+}
+
+#' Combine HMM and Spatial Activity Classifications
+#'
+#' Runs both HMM and spatial clustering methods, then combines them into a final
+#' `inactive`/`active` decision using either strict agreement, lenient union, or
+#' a weighted score.
+#'
+#' @param data Input GPS data.
+#' @param groups Grouping columns used for per-track classification.
+#' @param decision_col Output final state column name.
+#' @param score_col Output combined inactivity score column name.
+#' @param decision_rule Combination rule: `"weighted"` (default), `"both"`,
+#'   or `"either"`.
+#' @param hmm_weight Weight for HMM inactivity probability in weighted rule.
+#' @param spatial_weight Weight for spatial inactivity indicator in weighted rule.
+#' @param inactive_threshold Threshold on weighted score for inactive label.
+#' @param hmm_state_col Output column name for HMM state labels.
+#' @param hmm_prob_col Output column name for HMM inactive probabilities.
+#' @param spatial_state_col Output column name for spatial state labels.
+#' @param spatial_cluster_col Output spatial cluster id column name.
+#' @param spatial_dwell_col Output spatial dwell duration column name.
+#' @param hmm_fit_max_rows Maximum rows for HMM fitting.
+#' @param spatial_radius_m Radius for spatial clustering (meters).
+#' @param spatial_min_dwell_mins Minimum dwell time for spatial inactivity.
+#' @param spatial_min_points Minimum points for spatial inactivity cluster.
+#' @param spatial_max_gap_mins Maximum allowable gap within spatial clusters.
+#' @param min_run_n Optional run-length smoothing threshold.
+#' @param seed Random seed.
+#' @param verbose Logical; print summary output.
+#' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
+#'
+#' @return Input data with appended HMM, spatial, and final consensus columns.
+#' @export
+grz_classify_activity_consensus <- function(
+  data,
+  groups = NULL,
+  decision_col = "activity_state_consensus",
+  score_col = "inactive_score_consensus",
+  decision_rule = c("weighted", "both", "either"),
+  hmm_weight = 0.6,
+  spatial_weight = 0.4,
+  inactive_threshold = 0.6,
+  hmm_state_col = "activity_state_hmm",
+  hmm_prob_col = "inactive_prob_hmm",
+  spatial_state_col = "activity_state_spatial",
+  spatial_cluster_col = "activity_cluster_spatial",
+  spatial_dwell_col = "activity_dwell_mins_spatial",
+  hmm_fit_max_rows = 200000L,
+  spatial_radius_m = 20,
+  spatial_min_dwell_mins = 20,
+  spatial_min_points = 3L,
+  spatial_max_gap_mins = 60,
+  min_run_n = 2L,
+  seed = 1,
+  verbose = TRUE,
+  return_class = c("data.frame", "data.table")
+) {
+  rc <- grz_match_output_class(return_class)
+  decision_rule <- match.arg(decision_rule)
+
+  if (!is.numeric(hmm_weight) || length(hmm_weight) != 1L || hmm_weight < 0) {
+    stop("`hmm_weight` must be a non-negative number.", call. = FALSE)
+  }
+  if (!is.numeric(spatial_weight) || length(spatial_weight) != 1L || spatial_weight < 0) {
+    stop("`spatial_weight` must be a non-negative number.", call. = FALSE)
+  }
+  if ((hmm_weight + spatial_weight) <= 0) {
+    stop("`hmm_weight + spatial_weight` must be > 0.", call. = FALSE)
+  }
+  if (!is.numeric(inactive_threshold) || length(inactive_threshold) != 1L || inactive_threshold < 0 || inactive_threshold > 1) {
+    stop("`inactive_threshold` must be in [0, 1].", call. = FALSE)
+  }
+
+  dt <- data.table::as.data.table(
+    grz_classify_activity_hmm(
+      data = data,
+      groups = groups,
+      state_col = hmm_state_col,
+      inactive_prob_col = hmm_prob_col,
+      fit_max_rows = hmm_fit_max_rows,
+      min_run_n = min_run_n,
+      seed = seed,
+      verbose = FALSE,
+      return_class = "data.table"
+    )
+  )
+
+  dt <- data.table::as.data.table(
+    grz_classify_activity_spatial(
+      data = dt,
+      groups = groups,
+      state_col = spatial_state_col,
+      cluster_col = spatial_cluster_col,
+      dwell_col = spatial_dwell_col,
+      radius_m = spatial_radius_m,
+      min_dwell_mins = spatial_min_dwell_mins,
+      min_points = spatial_min_points,
+      max_gap_mins = spatial_max_gap_mins,
+      min_run_n = min_run_n,
+      verbose = FALSE,
+      return_class = "data.table"
+    )
+  )
+
+  dt[, .grz_hmm_score := suppressWarnings(as.numeric(get(hmm_prob_col)))]
+  dt[!is.finite(.grz_hmm_score), .grz_hmm_score := data.table::fifelse(get(hmm_state_col) == "inactive", 1, 0)]
+  dt[!is.finite(.grz_hmm_score), .grz_hmm_score := NA_real_]
+
+  dt[, .grz_spatial_score := data.table::fifelse(get(spatial_state_col) == "inactive", 1, 0)]
+  dt[is.na(get(spatial_state_col)), .grz_spatial_score := NA_real_]
+
+  if (decision_rule == "both") {
+    dt[, (score_col) := data.table::fifelse(
+      is.na(.grz_hmm_score) | is.na(.grz_spatial_score),
+      NA_real_,
+      data.table::fifelse(.grz_hmm_score >= 0.5 & .grz_spatial_score >= 0.5, 1, 0)
+    )]
+  } else if (decision_rule == "either") {
+    dt[, (score_col) := data.table::fifelse(
+      is.na(.grz_hmm_score) & is.na(.grz_spatial_score),
+      NA_real_,
+      data.table::fifelse(
+        data.table::fcoalesce(.grz_hmm_score, 0) >= 0.5 | data.table::fcoalesce(.grz_spatial_score, 0) >= 0.5,
+        1,
+        0
+      )
+    )]
+  } else {
+    total_w <- hmm_weight + spatial_weight
+    dt[, (score_col) := (
+      hmm_weight * data.table::fcoalesce(.grz_hmm_score, 0) +
+        spatial_weight * data.table::fcoalesce(.grz_spatial_score, 0)
+    ) / total_w]
+    dt[is.na(.grz_hmm_score) & is.na(.grz_spatial_score), (score_col) := NA_real_]
+  }
+
+  dt[, (decision_col) := data.table::fifelse(
+    is.na(get(score_col)),
+    NA_character_,
+    data.table::fifelse(get(score_col) >= inactive_threshold, "inactive", "active")
+  )]
+
+  if (as.integer(min_run_n) > 1L) {
+    grp <- grz_default_group_cols(dt, groups = groups)
+    dt[!is.na(get(decision_col)), (decision_col) := grz_smooth_state_runs(get(decision_col), min_run_n = as.integer(min_run_n)), by = grp]
+  }
+
+  if (isTRUE(verbose)) {
+    counts <- dt[, .N, by = decision_col][order(-N)]
+    msg <- paste(paste0(counts[[decision_col]], "=", counts$N), collapse = ", ")
+    cat(
+      "[classify_activity_consensus] rule=",
+      decision_rule,
+      " threshold=",
+      format(inactive_threshold, nsmall = 2),
+      " ",
+      msg,
+      "\n",
+      sep = ""
+    )
+  }
+
+  dt[, c(".grz_hmm_score", ".grz_spatial_score") := NULL]
+  grz_as_output(dt, rc)
 }
 
 #' Classify behavior states from movement metrics

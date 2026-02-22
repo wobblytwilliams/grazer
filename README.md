@@ -2,6 +2,21 @@
 
 `grazer` is an R package for cleaning, calculating, and summarising GPS data from cattle grazing experiments.
 
+## Installation (devtools)
+
+Install from GitHub:
+
+```r
+install.packages("devtools")
+devtools::install_github("wobblytwilliams/grazer")
+```
+
+For local package development from this repo:
+
+```r
+devtools::load_all(".")
+```
+
 ## 1. Core Design Decisions
 
 - Required minimum input columns: `sensor_id`, `datetime`, `lon`, `lat`.
@@ -68,6 +83,10 @@ Default epoch:
 ### Step F: Behavior Interpretation Loop
 - `grz_plot_diurnal_metrics()` (cohort/group metric heatmaps for threshold setting)
 - `grz_behavior_threshold_guide()` (hourly quantiles + distribution plots for threshold tuning)
+- `grz_tune_thresholds()` (mixture-based cutoff suggestion + threshold sweep score surface)
+- `grz_classify_activity_hmm()` (2-state HMM with distance + turn for `inactive`/`active`)
+- `grz_classify_activity_spatial()` (staypoint-style spatial inactivity clustering)
+- `grz_classify_activity_consensus()` (combine HMM + spatial signals into a final decision)
 - `grz_classify_behavior()` (rule-based `rest` / `graze` / `travel`)
 - `grz_plot_diurnal_states()` (diurnal state proportions)
 - `grz_validate_behavior()` (state counts, transitions, bouts, PCA diagnostic)
@@ -83,6 +102,9 @@ Default epoch:
 
 - `grz_map()` is currently retained as-is.
 - It now accepts preferred `group` terminology (with `block` retained for backward compatibility).
+- For behaviour QA, `state_col = "activity_state_hmm"` or
+  `state_col = "activity_state_consensus"` applies fixed state colouring
+  (default red `inactive`, green `active`) and works with `timeline = TRUE`.
 
 ## 5. Current Implemented Function Set
 
@@ -119,6 +141,10 @@ Epoch-level calculations:
 Behavior interpretation:
 - `grz_plot_diurnal_metrics()`
 - `grz_behavior_threshold_guide()`
+- `grz_tune_thresholds()`
+- `grz_classify_activity_hmm()`
+- `grz_classify_activity_spatial()`
+- `grz_classify_activity_consensus()`
 - `grz_classify_behavior()`
 - `grz_plot_diurnal_states()`
 - `grz_validate_behavior()`
