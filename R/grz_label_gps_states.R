@@ -12,7 +12,7 @@
 #' @param lat Latitude column name.
 #' @param time Datetime column name.
 #' @param id Optional unique row id column. If NULL, an internal id is created.
-#' @param colour_by Optional column used for filtering groups in the sidebar.
+#' @param color_by Optional column used for filtering groups in the sidebar.
 #' @param initial_label_col Label column name to read/write.
 #' @param tz Time zone used to parse time.
 #' @param display_tz Time zone used for display in the app.
@@ -28,13 +28,13 @@
 #' @return A data frame with updated initial_label_col values (ACTIVE,
 #'   INACTIVE, or NA).
 #' @export
-label_state <- function(
+grz_label_gps_states <- function(
   data,
   lon = "lon",
   lat = "lat",
   time = "time",
   id = NULL,
-  colour_by = NULL,
+  color_by = NULL,
   initial_label_col = "label",
   tz = "UTC",
   display_tz = tz,
@@ -73,8 +73,8 @@ label_state <- function(
   if (!is.null(id) && !id %in% names(df)) {
     stop("`id` column not found: ", id, call. = FALSE)
   }
-  if (!is.null(colour_by) && !colour_by %in% names(df)) {
-    stop("`colour_by` column not found: ", colour_by, call. = FALSE)
+  if (!is.null(color_by) && !color_by %in% names(df)) {
+    stop("`color_by` column not found: ", color_by, call. = FALSE)
   }
   if (!is.null(animal_col) && !animal_col %in% names(df)) {
     stop("`animal_col` column not found: ", animal_col, call. = FALSE)
@@ -136,7 +136,7 @@ label_state <- function(
 
   if (!is.null(n_animals)) {
     if (is.null(animal_col)) {
-      candidates <- unique(c("sensor_id", "animal_id", "device_id", colour_by))
+      candidates <- unique(c("sensor_id", "animal_id", "device_id", color_by))
       candidates <- candidates[!is.na(candidates) & candidates %in% names(df)]
       if (length(candidates) == 0L) {
         stop(
@@ -489,16 +489,16 @@ label_state <- function(
   )
 
   ui <- shiny::fluidPage(
-    shiny::titlePanel("GPS Timeline Labelling App (Experimental)"),
+    shiny::titlePanel("GPS Timeline Labelling App"),
     shiny::sidebarLayout(
       shiny::sidebarPanel(
         shiny::p("Use the map timeline control (bottom-left) to scrub time."),
         shiny::p("Click points or draw shapes to select, then apply labels."),
-        if (!is.null(colour_by)) {
+        if (!is.null(color_by)) {
           shiny::selectInput(
             "filter_group",
-            paste0("Filter by ", colour_by),
-            choices = c("All", sort(unique(as.character(df[[colour_by]])))),
+            paste0("Filter by ", color_by),
+            choices = c("All", sort(unique(as.character(df[[color_by]])))),
             selected = "All"
           )
         },
@@ -551,8 +551,8 @@ label_state <- function(
 
     display_base_df <- shiny::reactive({
       d <- base_df[base_df$.label_key %in% display_keys, , drop = FALSE]
-      if (!is.null(colour_by) && !is.null(input$filter_group) && input$filter_group != "All") {
-        d <- d[as.character(d[[colour_by]]) == input$filter_group, , drop = FALSE]
+      if (!is.null(color_by) && !is.null(input$filter_group) && input$filter_group != "All") {
+        d <- d[as.character(d[[color_by]]) == input$filter_group, , drop = FALSE]
       }
       d
     })
@@ -820,7 +820,7 @@ label_state <- function(
         utils::head(d_vis, 15)
       }
 
-      keep <- unique(c(id, time, initial_label_col, colour_by, animal_col))
+      keep <- unique(c(id, time, initial_label_col, color_by, animal_col))
       keep <- keep[!is.na(keep) & keep %in% names(d)]
       if (length(keep) == 0L) {
         keep <- names(d)
@@ -864,13 +864,13 @@ label_state <- function(
 # )
 # toy$point_id <- paste(toy$animal_id, format(toy$timestamp, "%Y%m%d%H%M%S"), seq_len(n), sep = "_")
 #
-# labelled <- label_state(
+# labelled <- grz_label_gps_states(
 #   data = toy,
 #   lon = "lon",
 #   lat = "lat",
 #   time = "timestamp",
 #   id = "point_id",
-#   colour_by = "animal_id",
+#   color_by = "animal_id",
 #   initial_label_col = "label",
 #   start_day_offset = 0L,
 #   time_window = "week",

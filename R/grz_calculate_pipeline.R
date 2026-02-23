@@ -359,7 +359,7 @@ grz_calculate_epoch_metrics <- function(
     )
   }
 
-  out <- grz_per_entity_summary(pieces)
+  out <- grz_merge_metric_tables(pieces)
   if (isTRUE(verbose)) {
     cat(sprintf("[calculate_epoch_metrics] epoch=%s include=%s rows=%s\n", epoch, paste(include, collapse = ","), format(nrow(out), big.mark = ",")))
   }

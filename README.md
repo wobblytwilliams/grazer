@@ -1,144 +1,93 @@
 # grazer
 
-`grazer` is an R package for cleaning, calculating, and summarising GPS data from cattle grazing experiments.
+`grazer` provides tools to ingest, clean, map, and analyse GPS data from cattle grazing experiments.
 
-## Installation (devtools)
+The package is designed around a practical pipeline:
+data import -> validation -> cleaning -> metric calculation -> behavior interpretation.
 
-Install from GitHub:
+## Installation
+
+Install the released version from CRAN (once available):
+
+```r
+# install.packages("grazer")
+```
+
+Install the development version from GitHub:
 
 ```r
 install.packages("devtools")
 devtools::install_github("wobblytwilliams/grazer")
 ```
 
-For local package development from this repo:
+## Input Data Requirements
+
+Minimum required columns are:
+
+| Column | Description |
+|---|---|
+| `sensor_id` | Device or animal identifier |
+| `datetime` | Timestamp (`POSIXct` or parseable datetime string) |
+| `lon` | Longitude (decimal degrees) |
+| `lat` | Latitude (decimal degrees) |
+
+Additional columns are treated as metadata and retained through the workflow where possible.
+
+## Quick Start
 
 ```r
-devtools::load_all(".")
+library(grazer)
+
+# 1) Read and validate
+gps <- grz_read_gps("path/to/gps.csv", validate = FALSE)
+gps <- grz_validate(gps, drop_invalid = TRUE)
+
+# 2) Clean
+gps_clean <- grz_clean(
+  gps,
+  steps = c("duplicates", "errors", "speed_fixed", "denoise"),
+  max_speed_mps = 4
+)
+
+# 3) Row-level metrics
+gps_move <- grz_calculate_movement(gps_clean)
+gps_social <- grz_calculate_social(gps_clean)
+
+# 4) Epoch summaries
+daily_metrics <- grz_calculate_epoch_metrics(gps_clean, epoch = "day")
+
+head(daily_metrics)
 ```
 
-## 1. Core Design Decisions
+## Main Function Groups
 
-- Required minimum input columns: `sensor_id`, `datetime`, `lon`, `lat`.
-- Default return type for pipeline functions: `data.frame`.
-- Internal processing uses `data.table` for speed.
-- Cleaning functions are drop-based (not flag-only) and print:
-  - rows dropped
-  - before/after row counts
-- `verbose = TRUE` by default.
-- Optional `snapshot = TRUE` prints a quick state snapshot after each clean step.
-- Terminology preference: `group` (not `block`).
-
-## 2. Pipeline Framework
-
-### Step A: Ingest (optional helper)
+Ingest and validation:
 - `grz_read_gps()`
 - `grz_standardise_gps()`
-
-These are kept available, but ingestion can be done outside the package.
-
-### Step B: Validate
 - `grz_validate()`
-
-Checks schema compliance and row validity (sensor/date/coords), prints a summary, and returns data.
-
-### Step C: Clean
-- `grz_clean_duplicates()`
-- `grz_clean_errors()`
-- `grz_clean_speed_fixed()` (default threshold `4 m/s`)
-- `grz_clean_speed_stat()` (data-driven threshold)
-- `grz_clean_spatial()` (polygon-filtering with paddock assignment)
-- `grz_denoise()` (first draft static-jitter reduction)
-- `grz_clean()` wrapper (multi-step pipeline)
-
-Spatial cleaning rules implemented:
-- `(0,0)` rows are dropped.
-- Invalid datetime rows are dropped in cleaning.
-- Default paddock buffer is `100 m`.
-- If no paddock intersection: drop point.
-- For overlap ambiguity: assign daily modal paddock per animal/group; drop points outside that modal paddock.
-- Paddock naming checks `NAME` and `Description`; requires complete naming in one column; `NAME` is preferred.
-
-### Step D: Calculate (row-level)
-- `grz_calculate_movement()`
-- `grz_calculate_social()`
-
-Default intent:
-- metrics are appended to row-level data first.
-
-Social alignment default:
-- `align_interval_mins = "base"`:
-  - median observed time difference
-  - rounded to nearest minute
-
-### Step E: Summarise (epoch-level)
-- `grz_summarise_movement()`
-- `grz_summarise_social()`
-- `grz_calculate_spatial()` (epoch-level spatial/home-range metrics)
-- `grz_calculate_epoch_metrics()` wrapper
-
-Default epoch:
-- `day`
-
-### Step F: Behavior Interpretation Loop
-- `grz_plot_diurnal_metrics()` (cohort/group metric heatmaps for threshold setting)
-- `grz_behavior_threshold_guide()` (hourly quantiles + distribution plots for threshold tuning)
-- `grz_tune_thresholds()` (mixture-based cutoff suggestion + threshold sweep score surface)
-- `grz_classify_activity_hmm()` (2-state HMM with distance + turn for `inactive`/`active`)
-- `grz_classify_activity_spatial()` (staypoint-style spatial inactivity clustering)
-- `grz_classify_activity_consensus()` (combine HMM + spatial signals into a final decision)
-- `grz_classify_behavior()` (rule-based `rest` / `graze` / `travel`)
-- `grz_plot_diurnal_states()` (diurnal state proportions)
-- `grz_validate_behavior()` (state counts, transitions, bouts, PCA diagnostic)
-- `grz_behavior_pipeline()` wrapper
-
-## 3. Optional Utility Functions
-
-- `grz_align()` (interpolate/align at explicit or base interval)
-- `grz_append_pdk_names()` (used by spatial cleaning)
-- `grz_downsample()` (representative or rigid downsampling)
-
-## 4. Mapping
-
-- `grz_map()` is currently retained as-is.
-- It now accepts preferred `group` terminology (with `block` retained for backward compatibility).
-- For behaviour QA, `state_col = "activity_state_hmm"` or
-  `state_col = "activity_state_consensus"` applies fixed state colouring
-  (default red `inactive`, green `active`) and works with `timeline = TRUE`.
-
-## 5. Current Implemented Function Set
-
-Ingest/validation:
-- `grz_read_gps()`
-- `grz_standardise_gps()`
 - `grz_validate_gps()`
-- `grz_validate()`
 
 Cleaning:
 - `grz_clean_duplicates()`
 - `grz_clean_errors()`
 - `grz_clean_speed_fixed()`
 - `grz_clean_speed_stat()`
-- `grz_append_pdk_names()`
+- `grz_append_paddock_names()`
 - `grz_clean_spatial()`
 - `grz_denoise()`
 - `grz_clean()`
 
-Utilities:
-- `grz_align()`
-- `grz_downsample()`
-
-Row-level calculations:
+Row-level metrics:
 - `grz_calculate_movement()`
 - `grz_calculate_social()`
 
-Epoch-level calculations:
+Epoch-level summaries:
 - `grz_summarise_movement()`
 - `grz_summarise_social()`
 - `grz_calculate_spatial()`
 - `grz_calculate_epoch_metrics()`
 
-Behavior interpretation:
+Behavior tools:
 - `grz_plot_diurnal_metrics()`
 - `grz_behavior_threshold_guide()`
 - `grz_tune_thresholds()`
@@ -150,35 +99,30 @@ Behavior interpretation:
 - `grz_validate_behavior()`
 - `grz_behavior_pipeline()`
 
-Legacy draft metrics (retained for compatibility):
-- `grz_remove_duplicates()`
-- `grz_flag_track_qc()`
-- `grz_regularise_grid()`
-- `grz_downsample_phases()`
-- `grz_downsample_async()`
-- `grz_movement_metrics()`
-- `grz_social_metrics()`
-- `grz_home_range_metrics()`
-- `grz_activity_metrics()`
-- `grz_qc_sampling()`
-- `grz_qc_report()`
-- `grz_per_entity_summary()`
+## Interactive Tools
 
-Mapping:
-- `grz_map()`
+- `grz_map()` for interactive GPS mapping.
+- `grz_label_gps_states()` for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app.
 
-## 6. Quick Run Script
-
-Use:
+Example:
 
 ```r
-source("scripts/run_draft_checks.R")
+labelled <- grz_label_gps_states(
+  data = gps_clean,
+  lon = "lon",
+  lat = "lat",
+  time = "datetime",
+  color_by = "sensor_id",
+  initial_label_col = "label"
+)
 ```
 
-to execute draft checks on `test_data/ManbullooToSimulate.csv`.
+## Output Conventions
 
-## 7. Open Questions
+- Functions return `data.frame` by default.
+- Set `return_class = "data.table"` where supported for data.table output.
+- Cleaning functions are drop-based and report dropped row counts when `verbose = TRUE`.
 
-Remaining unresolved choices are tracked in:
+## License
 
-- `questions.txt`
+MIT License.

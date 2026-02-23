@@ -308,7 +308,7 @@ grz_select_paddock_name_col <- function(paddocks) {
 #' @param data Data frame with `lon`, `lat`, `datetime`, and `sensor_id`.
 #' @param paddocks_sf `sf` polygon object.
 #' @param buffer_m Buffer distance in meters.
-#' @param pdk_col Output paddock column name.
+#' @param paddock_col Output paddock column name.
 #' @param groups Grouping columns used for modal paddock assignment
 #'   (default deployment + sensor when available).
 #' @param verbose Logical; print diagnostics.
@@ -316,17 +316,17 @@ grz_select_paddock_name_col <- function(paddocks) {
 #'
 #' @return Data with appended paddock column and dropped out-of-paddock rows.
 #' @export
-grz_append_pdk_names <- function(
+grz_append_paddock_names <- function(
   data,
   paddocks_sf,
   buffer_m = 100,
-  pdk_col = "paddock",
+  paddock_col = "paddock",
   groups = NULL,
   verbose = TRUE,
   return_class = c("data.frame", "data.table")
 ) {
   if (!requireNamespace("sf", quietly = TRUE)) {
-    stop("`grz_append_pdk_names()` requires the `sf` package.", call. = FALSE)
+    stop("`grz_append_paddock_names()` requires the `sf` package.", call. = FALSE)
   }
   if (!inherits(paddocks_sf, "sf")) {
     stop("`paddocks_sf` must be an sf object.", call. = FALSE)
@@ -334,8 +334,8 @@ grz_append_pdk_names <- function(
   if (!is.numeric(buffer_m) || length(buffer_m) != 1L || buffer_m < 0) {
     stop("`buffer_m` must be a non-negative number.", call. = FALSE)
   }
-  if (!is.character(pdk_col) || length(pdk_col) != 1L || trimws(pdk_col) == "") {
-    stop("`pdk_col` must be a single non-empty column name.", call. = FALSE)
+  if (!is.character(paddock_col) || length(paddock_col) != 1L || trimws(paddock_col) == "") {
+    stop("`paddock_col` must be a single non-empty column name.", call. = FALSE)
   }
 
   rc <- grz_match_output_class(return_class)
@@ -344,16 +344,16 @@ grz_append_pdk_names <- function(
 
   name_col <- grz_select_paddock_name_col(paddocks_sf)
   pdks <- paddocks_sf
-  pdks[[pdk_col]] <- as.character(pdks[[name_col]])
+  pdks[[paddock_col]] <- as.character(pdks[[name_col]])
 
   if (is.na(sf::st_crs(pdks))) {
     sf::st_crs(pdks) <- 4326
     if (isTRUE(verbose)) {
-      cat("[append_pdk_names] paddock CRS missing; assuming EPSG:4326.\n")
+      cat("[append_paddock_names] paddock CRS missing; assuming EPSG:4326.\n")
     }
   }
 
-  pdks_3857 <- sf::st_transform(pdks[, pdk_col], 3857)
+  pdks_3857 <- sf::st_transform(pdks[, paddock_col], 3857)
   pdks_buf <- sf::st_buffer(pdks_3857, dist = buffer_m)
   pdks_buf <- sf::st_make_valid(pdks_buf)
 
@@ -370,7 +370,7 @@ grz_append_pdk_names <- function(
       }
       data.table::data.table(
         .grz_row_id = i,
-        .grz_paddock = as.character(pdks_buf[[pdk_col]][idx])
+        .grz_paddock = as.character(pdks_buf[[paddock_col]][idx])
       )
     }),
     use.names = TRUE,
@@ -418,14 +418,14 @@ grz_append_pdk_names <- function(
     all = FALSE,
     sort = FALSE
   )
-  data.table::setnames(out, ".grz_modal_pdk", pdk_col)
+  data.table::setnames(out, ".grz_modal_pdk", paddock_col)
   out[, c(".grz_row_id", ".grz_day") := NULL]
 
   if (isTRUE(verbose)) {
     dropped <- nrow(base) - nrow(out)
     cat(
       sprintf(
-        "[append_pdk_names] name_col=%s buffer_m=%s dropped_nonmodal_or_outside=%s\n",
+        "[append_paddock_names] name_col=%s buffer_m=%s dropped_nonmodal_or_outside=%s\n",
         name_col,
         format(buffer_m, trim = TRUE),
         format(dropped, big.mark = ",")
@@ -441,8 +441,8 @@ grz_append_pdk_names <- function(
 #' @param data Data frame of GPS rows.
 #' @param paddocks_sf `sf` paddock polygons.
 #' @param buffer_m Paddock buffer in meters.
-#' @param append_pdk Logical; append paddock column.
-#' @param pdk_col Name of paddock output column.
+#' @param append_paddock Logical; append paddock column.
+#' @param paddock_col Name of paddock output column.
 #' @param groups Grouping columns for modal paddock assignment.
 #' @param verbose Logical; print drop counts.
 #' @param snapshot Logical; print quick snapshot after step.
@@ -454,8 +454,8 @@ grz_clean_spatial <- function(
   data,
   paddocks_sf,
   buffer_m = 100,
-  append_pdk = TRUE,
-  pdk_col = "paddock",
+  append_paddock = TRUE,
+  paddock_col = "paddock",
   groups = NULL,
   verbose = TRUE,
   snapshot = FALSE,
@@ -464,18 +464,18 @@ grz_clean_spatial <- function(
   rc <- grz_match_output_class(return_class)
   before_n <- nrow(data)
 
-  out <- grz_append_pdk_names(
+  out <- grz_append_paddock_names(
     data = data,
     paddocks_sf = paddocks_sf,
     buffer_m = buffer_m,
-    pdk_col = pdk_col,
+    paddock_col = paddock_col,
     groups = groups,
     verbose = verbose,
     return_class = "data.table"
   )
 
-  if (!isTRUE(append_pdk) && pdk_col %in% names(out)) {
-    out[, (pdk_col) := NULL]
+  if (!isTRUE(append_paddock) && paddock_col %in% names(out)) {
+    out[, (paddock_col) := NULL]
   }
 
   grz_print_clean_step("clean_spatial", before_n, nrow(out), verbose = verbose)
@@ -586,8 +586,8 @@ grz_denoise <- function(
 #' @param max_speed_mps Fixed speed threshold (m/s).
 #' @param speed_stat_method Statistical speed method.
 #' @param buffer_m Paddock buffer in meters.
-#' @param append_pdk Logical; append paddock name column.
-#' @param pdk_col Output paddock column name.
+#' @param append_paddock Logical; append paddock name column.
+#' @param paddock_col Output paddock column name.
 #' @param groups Grouping columns for speed/denoise/modal paddock operations.
 #' @param snapshot Logical; print snapshots after each step.
 #' @param verbose Logical; print details.
@@ -602,8 +602,8 @@ grz_clean <- function(
   max_speed_mps = 4,
   speed_stat_method = c("mad", "quantile"),
   buffer_m = 100,
-  append_pdk = TRUE,
-  pdk_col = "paddock",
+  append_paddock = TRUE,
+  paddock_col = "paddock",
   groups = NULL,
   snapshot = FALSE,
   verbose = TRUE,
@@ -673,8 +673,8 @@ grz_clean <- function(
         out,
         paddocks_sf = paddocks_sf,
         buffer_m = buffer_m,
-        append_pdk = append_pdk,
-        pdk_col = pdk_col,
+        append_paddock = append_paddock,
+        paddock_col = paddock_col,
         groups = groups,
         verbose = verbose,
         snapshot = snapshot,

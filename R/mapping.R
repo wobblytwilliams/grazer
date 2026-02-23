@@ -35,7 +35,7 @@ grz_make_block_palette <- function(values) {
 
 grz_make_state_palette <- function(values, state_colors = c(inactive = "#d7191c", active = "#1a9641")) {
   if (!is.character(state_colors) || length(state_colors) < 1L) {
-    stop("`state_colors` must be a named character vector of colours.", call. = FALSE)
+    stop("`state_colors` must be a named character vector of colors.", call. = FALSE)
   }
   if (is.null(names(state_colors)) || any(is.na(names(state_colors))) || any(trimws(names(state_colors)) == "")) {
     stop("`state_colors` must be named (e.g., c(inactive = '#d7191c', active = '#1a9641')).", call. = FALSE)
@@ -191,10 +191,10 @@ grz_prompt_continue <- function(stop_message) {
 #' @param lat Name of latitude column.
 #' @param datetime Name of datetime column.
 #' @param block Deprecated alias for `group`.
-#' @param group Optional grouping column(s) for colour/layer separation.
-#' @param state_col Optional state column for fixed state colouring (for
+#' @param group Optional grouping column(s) for color/layer separation.
+#' @param state_col Optional state column for fixed state coloring (for
 #'   example `activity_state_hmm`).
-#' @param state_colors Named colours for state levels. Defaults to red
+#' @param state_colors Named colors for state levels. Defaults to red
 #'   (`inactive`) and green (`active`).
 #' @param state_legend_title Legend title used when `state_col` is provided.
 #' @param timeline Logical; if `TRUE`, render points with an interactive time slider.
@@ -277,7 +277,7 @@ grz_map <- function(
     stop("`state_legend_title` must be a single string.", call. = FALSE)
   }
   if (!is.character(state_colors) || length(state_colors) < 1L) {
-    stop("`state_colors` must be a named character vector of colours.", call. = FALSE)
+    stop("`state_colors` must be a named character vector of colors.", call. = FALSE)
   }
   if (is.null(names(state_colors)) || any(is.na(names(state_colors))) || any(trimws(names(state_colors)) == "")) {
     stop("`state_colors` must be named (e.g., c(inactive = '#d7191c', active = '#1a9641')).", call. = FALSE)

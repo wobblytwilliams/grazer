@@ -11,8 +11,8 @@ grz_clean(
   max_speed_mps = 4,
   speed_stat_method = c("mad", "quantile"),
   buffer_m = 100,
-  append_pdk = TRUE,
-  pdk_col = "paddock",
+  append_paddock = TRUE,
+  paddock_col = "paddock",
   groups = NULL,
   snapshot = FALSE,
   verbose = TRUE,
@@ -33,9 +33,9 @@ grz_clean(
 
 \item{buffer_m}{Paddock buffer in meters.}
 
-\item{append_pdk}{Logical; append paddock name column.}
+\item{append_paddock}{Logical; append paddock name column.}
 
-\item{pdk_col}{Output paddock column name.}
+\item{paddock_col}{Output paddock column name.}
 
 \item{groups}{Grouping columns for speed/denoise/modal paddock operations.}
 

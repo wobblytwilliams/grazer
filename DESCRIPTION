@@ -13,6 +13,7 @@ Imports:
     data.table,
     tools
 Suggests:
+    arrow,
     ggplot2,
     leaflet,
     leaflet.extras,
@@ -21,6 +22,4 @@ Suggests:
     htmlwidgets,
     jsonlite,
     shiny,
-    sf,
-    testthat (>= 3.0.0)
-Config/testthat/edition: 3
+    sf

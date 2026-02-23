@@ -1,11 +1,26 @@
-#' Merge metric tables into one per-entity summary
-#'
-#' @param ... Metric tables (data.frames/data.tables), or a single list of
-#'   metric tables.
-#'
-#' @return A merged `data.table`.
-#' @export
-grz_per_entity_summary <- function(...) {
+grz_quantile_or_na <- function(x, p) {
+  x <- as.numeric(x)
+  x <- x[is.finite(x)]
+  if (length(x) == 0L) {
+    return(NA_real_)
+  }
+  as.numeric(stats::quantile(x, probs = p, na.rm = TRUE, type = 7, names = FALSE))
+}
+
+grz_mean_or_na <- function(x) {
+  x <- as.numeric(x)
+  x <- x[is.finite(x)]
+  if (length(x) == 0L) {
+    return(NA_real_)
+  }
+  mean(x, na.rm = TRUE)
+}
+
+grz_threshold_label <- function(x) {
+  gsub("\\.", "_", formatC(x, digits = 12, format = "fg", drop0trailing = TRUE))
+}
+
+grz_merge_metric_tables <- function(...) {
   args <- list(...)
   if (length(args) == 1L && is.list(args[[1L]]) && !is.data.frame(args[[1L]])) {
     args <- args[[1L]]
@@ -38,7 +53,7 @@ grz_per_entity_summary <- function(...) {
   join_keys <- common_cols[common_cols %in% candidate_keys]
   if (length(join_keys) == 0L) {
     stop(
-      "No common join keys across tables. Expected shared identifiers such as `sensor_id` or period keys.",
+      "No common join keys across tables. Expected shared identifiers such as `sensor_id` and `epoch`.",
       call. = FALSE
     )
   }

@@ -1,3 +1,8 @@
-^legacy_scripts$
-^test_data$
-^\\.vscode$
+^legacy_scripts($|/)
+^test_data($|/)
+^\.vscode($|/)
+^scripts($|/)
+^experimental($|/)
+^tests($|/)
+^questions\.txt$
+^Rplots\.pdf$

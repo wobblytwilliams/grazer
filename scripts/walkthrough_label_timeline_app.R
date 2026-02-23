@@ -55,13 +55,13 @@ clean$point_id <- paste(
 #    - Point size scrubber for marker radius
 #    Use \"Finish and return\" to close app and continue script.
 # -------------------------------------------------------------------
-labelled <- label_state(
+labelled <- grz_label_gps_states(
   data = clean,
   lon = "lon",
   lat = "lat",
   time = "datetime",
   id = "point_id",
-  colour_by = "sensor_id",
+  color_by = "sensor_id",
   initial_label_col = "label",
   tz = "UTC",
   start_day_offset = 15L,

@@ -1,14 +1,3 @@
-1. `grz_regularise_grid()`: should output be a complete grid with missing rows (current draft) or only observed rows snapped to grid?
-2. `grz_downsample_async()`: should `snap_tol_mins` be applied against an explicit per-entity target schedule (current draft is modulo-based filter)?
-3. `grz_social_metrics()`: current `interpolate = TRUE` rounds to nearest minute; should this instead use interval-specific interpolation (e.g., 15/30 min) from legacy workflows?
-4. `grz_social_metrics()`: SRI30 is currently computed as `within_30 / overlap` for each pair. Confirm if you want this exact formulation or a stricter half-weight index from legacy scripts.
-5. `grz_home_range_metrics()`: `kde95_ha` is currently a covariance-ellipse proxy, not full KDE contour extraction. Should v1 require true kernel UD implementation?
-6. `grz_qc_report()`: current output is a list of tables. Confirm whether you want a printable text report, a single flat table, or both.
-7. `grz_per_entity_summary()`: current merge uses shared key columns intersection (e.g., `sensor_id`, `period`). Confirm if you want enforced explicit keys argument to avoid accidental joins.
-8. `grz_denoise()`: first draft keeps a point when movement exceeds `radius_m` (default 8 m) OR elapsed time exceeds `max_gap_mins` (default 20). Confirm if these defaults and this method are acceptable for v1.
-9. `grz_clean_spatial()`: if there is a tie in daily modal paddock assignment (equal counts), current logic picks the first paddock alphabetically. Confirm preferred tie-breaking rule.
-10. `grz_calculate_social()`: current default herd partition is `deployment_id` and `paddock` when available. Confirm if this should be configurable in the main wrapper.
-11. `grz_calculate_spatial()`: `kde95_ha` currently uses covariance-ellipse proxy area, not full kernel contour extraction. Confirm whether to keep proxy for v1 or move to true KDE (extra package dependency).
-12. `grz_clean()`: default steps are `duplicates -> errors -> speed_fixed -> denoise`. Confirm whether `spatial` should be in defaults when paddocks are provided.
-13. `grz_classify_behavior()`: current default rule thresholds are `rest_speed_max = 0.05`, `graze_speed_max = 0.60`, `travel_speed_min = 0.60` m/s. Confirm if these should be tuned by cohort/deployment defaults.
-14. `grz_validate_behavior()`: PCA is exploratory only. Confirm whether you want an additional formal clustering-quality metric (e.g., silhouette) in v1.
+1. `grz_denoise()`: current rule retains a new point when movement exceeds `radius_m` or elapsed time exceeds `max_gap_mins`. Confirm if this v1 denoise rule is acceptable.
+2. `grz_clean_spatial()`: for daily modal paddock ties, current tie-break is alphabetical paddock name. Confirm preferred tie-break rule.
+3. `grz_calculate_spatial()`: `kde95_ha` currently uses a covariance-ellipse proxy rather than a full KDE contour. Confirm whether to keep proxy in v1.

@@ -40,12 +40,12 @@ grz_map(
 
 \item{block}{Deprecated alias for \code{group}.}
 
-\item{group}{Optional grouping column(s) for colour/layer separation.}
+\item{group}{Optional grouping column(s) for color/layer separation.}
 
-\item{state_col}{Optional state column for fixed state colouring (for
+\item{state_col}{Optional state column for fixed state coloring (for
 example \code{activity_state_hmm}).}
 
-\item{state_colors}{Named colours for state levels. Defaults to red
+\item{state_colors}{Named colors for state levels. Defaults to red
 (\code{inactive}) and green (\code{active}).}
 
 \item{state_legend_title}{Legend title used when \code{state_col} is provided.}

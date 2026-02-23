@@ -67,13 +67,13 @@ gps <- gps %>%
 # - click points (or select multiple with rectangle/polygon tools)
 # - mark ACTIVE / INACTIVE
 # - click "Finish and return" to continue this script
-labelled_now <- label_state(
+labelled_now <- grz_label_gps_states(
   data = gps,
   lon = "lon",
   lat = "lat",
   time = "datetime",
   id = "point_id",
-  colour_by = "sensor_id",
+  color_by = "sensor_id",
   initial_label_col = "label",
   tz = "UTC",
   start_day_offset = 15L,

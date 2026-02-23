@@ -82,7 +82,7 @@ if (requireNamespace("sf", quietly = TRUE)) {
     x_clean[1:min(nrow(x_clean), 5000), , drop = FALSE],
     paddocks_sf = paddock,
     buffer_m = 100,
-    append_pdk = TRUE,
+    append_paddock = TRUE,
     verbose = TRUE
   )
   cat("rows:", nrow(x_sp), "has paddock:", "paddock" %in% names(x_sp), "\n")

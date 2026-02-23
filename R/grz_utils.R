@@ -12,40 +12,6 @@ grz_require_cols <- function(data, cols, fun_name = "function") {
   }
 }
 
-grz_prepare_gps_dt <- function(data, fun_name = "function", drop_invalid = TRUE) {
-  if (!is.data.frame(data)) {
-    stop("`data` must be a data.frame.", call. = FALSE)
-  }
-
-  grz_require_cols(data, c("sensor_id", "datetime", "lon", "lat"), fun_name = fun_name)
-
-  dt <- data.table::copy(data.table::as.data.table(data))
-  data.table::set(dt, j = "sensor_id", value = as.character(dt[["sensor_id"]]))
-  data.table::set(dt, j = "datetime", value = grz_parse_datetime_utc(dt[["datetime"]]))
-  data.table::set(dt, j = "lon", value = suppressWarnings(as.numeric(dt[["lon"]])))
-  data.table::set(dt, j = "lat", value = suppressWarnings(as.numeric(dt[["lat"]])))
-
-  valid <- !is.na(dt$sensor_id) &
-    trimws(dt$sensor_id) != "" &
-    !is.na(dt$datetime) &
-    is.finite(dt$lon) & dt$lon >= -180 & dt$lon <= 180 &
-    is.finite(dt$lat) & dt$lat >= -90 & dt$lat <= 90
-
-  if (isTRUE(drop_invalid)) {
-    dt <- dt[valid, ]
-  }
-
-  data.table::setorderv(dt, c("sensor_id", "datetime"))
-  dt
-}
-
-grz_id_cols <- function(data) {
-  if ("deployment_id" %in% names(data)) {
-    return(c("deployment_id", "sensor_id"))
-  }
-  "sensor_id"
-}
-
 grz_haversine_m <- function(lon1, lat1, lon2, lat2) {
   lon1 <- as.numeric(lon1)
   lat1 <- as.numeric(lat1)
@@ -100,21 +66,6 @@ grz_bearing_deg <- function(lon1, lat1, lon2, lat2) {
 grz_abs_turn_rad <- function(current_bearing_deg, previous_bearing_deg) {
   d <- (current_bearing_deg - previous_bearing_deg + 180) %% 360 - 180
   abs(d) * pi / 180
-}
-
-grz_period_label <- function(datetime, period) {
-  period <- match.arg(period, c("total", "week", "date", "paddock_week"))
-
-  if (period == "total") {
-    return(rep("total", length(datetime)))
-  }
-  if (period == "week") {
-    return(strftime(datetime, format = "%G-W%V", tz = "UTC"))
-  }
-  if (period == "date") {
-    return(as.character(as.Date(datetime, tz = "UTC")))
-  }
-  strftime(datetime, format = "%G-W%V", tz = "UTC")
 }
 
 grz_lonlat_to_xy_m <- function(lon, lat) {

@@ -8,8 +8,8 @@ grz_clean_spatial(
   data,
   paddocks_sf,
   buffer_m = 100,
-  append_pdk = TRUE,
-  pdk_col = "paddock",
+  append_paddock = TRUE,
+  paddock_col = "paddock",
   groups = NULL,
   verbose = TRUE,
   snapshot = FALSE,
@@ -23,9 +23,9 @@ grz_clean_spatial(
 
 \item{buffer_m}{Paddock buffer in meters.}
 
-\item{append_pdk}{Logical; append paddock column.}
+\item{append_paddock}{Logical; append paddock column.}
 
-\item{pdk_col}{Name of paddock output column.}
+\item{paddock_col}{Name of paddock output column.}
 
 \item{groups}{Grouping columns for modal paddock assignment.}
 
