@@ -20,26 +20,16 @@ jobs:
         with:
           use-public-rspm: true
 
-      - name: Install site build dependencies
-        run: |
-          user_lib <- Sys.getenv("R_LIBS_USER")
-          if (!nzchar(user_lib)) {
-            stop("R_LIBS_USER is not set")
-          }
-          dir.create(user_lib, recursive = TRUE, showWarnings = FALSE)
-          .libPaths(c(user_lib, .libPaths()))
-          options(repos = c(CRAN = "https://cloud.r-project.org"))
-          install.packages(
-            c("pkgdown", "knitr", "rmarkdown", "data.table"),
-            lib = user_lib
-          )
-          if (!requireNamespace("pkgdown", quietly = TRUE)) {
-            stop("pkgdown failed to install")
-          }
-        shell: Rscript {0}
-
       - name: Build pkgdown site
-        run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
+        run: |
+          options(repos = c(CRAN = "https://cloud.r-project.org"))
+          needed <- c("pkgdown", "knitr", "rmarkdown", "data.table")
+          missing <- needed[!vapply(needed, requireNamespace, logical(1), quietly = TRUE)]
+          if (length(missing) > 0) {
+            install.packages(missing)
+          }
+          stopifnot(requireNamespace("pkgdown", quietly = TRUE))
+          pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
 
       - name: Deploy to gh-pages
