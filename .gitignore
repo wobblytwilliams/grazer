@@ -4,10 +4,10 @@
 .Rproj.user/
 .Rcheck/
 *.Rcheck/
-test_data/*
+test_data/
 legacy_scripts/
-experimental/output/*
+scripts/
+experimental/
+questions.txt
 
-!test_data/.gitkeep
-!experimental/output/.gitkeep
 Rplots.pdf
