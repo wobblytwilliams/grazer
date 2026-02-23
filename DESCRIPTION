@@ -15,7 +15,12 @@ Imports:
 Suggests:
     ggplot2,
     leaflet,
+    leaflet.extras,
     leaflet.extras2,
+    leaftime,
+    htmlwidgets,
+    jsonlite,
+    shiny,
     sf,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

@@ -6,6 +6,8 @@
 *.Rcheck/
 test_data/*
 legacy_scripts/
+experimental/output/*
 
 !test_data/.gitkeep
+!experimental/output/.gitkeep
 Rplots.pdf
