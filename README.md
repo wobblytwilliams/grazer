@@ -5,6 +5,8 @@
 The package is designed around a practical pipeline:
 data import -> validation -> cleaning -> metric calculation -> behavior interpretation.
 
+Website (pkgdown): <https://wobblytwilliams.github.io/grazer/>
+
 ## Installation
 
 Install the released version from CRAN (once available):

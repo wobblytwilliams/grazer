@@ -5,6 +5,8 @@ Authors@R:
     person("Grazer", "Maintainer", email = "maintainer@example.com", role = c("aut", "cre"))
 Description: Lightweight tools for cattle grazing experiments that support
     GPS data ingestion, cleaning, and basic movement summaries.
+URL: https://github.com/wobblytwilliams/grazer, https://wobblytwilliams.github.io/grazer/
+BugReports: https://github.com/wobblytwilliams/grazer/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -15,11 +17,14 @@ Imports:
 Suggests:
     arrow,
     ggplot2,
+    knitr,
     leaflet,
     leaflet.extras,
     leaflet.extras2,
     leaftime,
     htmlwidgets,
     jsonlite,
+    rmarkdown,
     shiny,
     sf
+VignetteBuilder: knitr
