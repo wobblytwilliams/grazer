@@ -6,7 +6,3 @@
 ^tests($|/)
 ^questions\.txt$
 ^Rplots\.pdf$
-^_pkgdown\.yml$
-^docs$
-^pkgdown$
-^\.github$

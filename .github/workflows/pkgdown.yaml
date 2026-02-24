@@ -26,19 +26,12 @@ jobs:
         run: |
           options(repos = c(CRAN = "https://cloud.r-project.org"))
           install.packages(c("remotes", "pkgdown", "knitr", "rmarkdown"))
-          if (!requireNamespace("pkgdown", quietly = TRUE)) {
-            stop("pkgdown did not install in dependency step")
-          }
           remotes::install_deps(dependencies = NA, upgrade = "never")
           remotes::install_local(dependencies = FALSE, upgrade = "never", force = TRUE)
         shell: Rscript {0}
 
       - name: Build pkgdown site
         run: |
-          options(repos = c(CRAN = "https://cloud.r-project.org"))
-          if (!requireNamespace("pkgdown", quietly = TRUE)) {
-            install.packages("pkgdown")
-          }
           stopifnot(requireNamespace("pkgdown", quietly = TRUE))
           pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
