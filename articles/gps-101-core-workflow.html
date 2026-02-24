@@ -116,6 +116,23 @@ reporting.</li>
 <p>This vignette uses synthetic data so it is fully reproducible.<br>
 In real projects, you would usually start with
 <code>grz_read_gps("your_file.csv")</code>.</p>
+<p>How this works in practice:</p>
+<ul>
+<li>Keep raw ingest as close as possible to source files.</li>
+<li>Add only minimal transformations before validation.</li>
+<li>Preserve metadata columns so they can be used later in grouping and
+summaries.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: parsing datetimes in local time by accident.<br>
+Check: confirm all times are parsed in the same timezone (typically
+UTC).</li>
+<li>Pitfall: silently coercing text coordinates to
+<code>NA</code>.<br>
+Check: inspect rows with missing/invalid
+<code>lon</code>/<code>lat</code> before cleaning.</li>
+</ul>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">101</span><span class="op">)</span></span>
 <span></span>
@@ -197,6 +214,27 @@ issue type.</li>
 <code>invalid_rows</code>: full rows that failed validation checks,
 with <code>invalid_reason</code>.</li>
 </ul>
+<p>How this works in practice:</p>
+<ul>
+<li>
+<code><a href="../reference/grz_validate.html">grz_validate()</a></code> enforces the minimum schema
+(<code>sensor_id</code>, <code>datetime</code>, <code>lon</code>,
+<code>lat</code>).</li>
+<li>It parses and type-checks each core field.</li>
+<li>It records invalid reasons at row level so decisions are
+auditable.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: dropping invalid rows too early can hide data-logger
+issues.<br>
+Check: run once with <code>drop_invalid = FALSE</code> and inspect
+<code>invalid_rows</code>.</li>
+<li>Pitfall: blank <code>sensor_id</code> values across multiple
+animals.<br>
+Check: verify <code>sensor_id</code> uniqueness and completeness before
+movement metrics.</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="clean-the-gps-rows">4) Clean the GPS rows<a class="anchor" aria-label="anchor" href="#clean-the-gps-rows"></a>
@@ -242,6 +280,22 @@ periods.</li>
 <span><span class="co">#&gt; 4       A01 2024-05-01 00:30:00 132.3050 -14.47394</span></span>
 <span><span class="co">#&gt; 5       A01 2024-05-01 00:40:00 132.3050 -14.47372</span></span>
 <span><span class="co">#&gt; 6       A01 2024-05-01 00:50:00 132.3052 -14.47383</span></span></code></pre></div>
+<p>How this works in practice:</p>
+<ul>
+<li>Cleaning is intentionally drop-based and ordered.</li>
+<li>Duplicate and invalid coordinate fixes are removed first.</li>
+<li>Speed filtering removes biologically implausible jumps.</li>
+<li>Denoising removes jitter during likely static periods.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: speed threshold too strict for your production class (e.g.,
+mustering).<br>
+Check: inspect upper speed tail before setting
+<code>max_speed_mps</code>.</li>
+<li>Pitfall: aggressive denoising in coarse sampling intervals.<br>
+Check: compare pre/post row counts by animal and day.</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="calculate-movement-metrics-row-level">5) Calculate movement metrics (row-level)<a class="anchor" aria-label="anchor" href="#calculate-movement-metrics-row-level"></a>
@@ -290,6 +344,26 @@ seconds.</li>
 <li>
 <code>turn_rad</code>: absolute turning angle (radians) between
 consecutive bearings.</li>
+</ul>
+<p>How this works in practice:</p>
+<ul>
+<li>
+<code>step_m</code> is great-circle distance between consecutive
+fixes.</li>
+<li>
+<code>speed_mps</code> is <code>step_m / step_dt_s</code>.</li>
+<li>
+<code>turn_rad</code> uses the absolute difference in successive
+headings.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: irregular fix intervals inflate/deflate apparent
+speed.<br>
+Check: inspect <code>step_dt_s</code> distribution.</li>
+<li>Pitfall: first fix per track has no lag values.<br>
+Check: expect <code>NA</code> in first row of each group for lag-derived
+metrics.</li>
 </ul>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_movement</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -389,6 +463,26 @@ matching timestamp.</li>
 <code>mean_dist_to_others_m</code>: average distance to all other
 animals.</li>
 </ul>
+<p>How this works in practice:</p>
+<ul>
+<li>For each timestamp (and optional herd partition), pairwise distances
+are computed.</li>
+<li>Nearest-neighbour metrics and threshold counts are derived from the
+distance matrix.</li>
+<li>Threshold columns (<code>n_within_*m</code>,
+<code>any_within_*m</code>) support density/proximity
+interpretation.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: unsynchronised timestamps between collars.<br>
+Check: use <code><a href="../reference/grz_align.html">grz_align()</a></code> when needed before social
+metrics.</li>
+<li>Pitfall: interpreting social isolation in very small group
+sizes.<br>
+Check: inspect <code>social_group_size</code> before
+interpretation.</li>
+</ul>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_social_tbl</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">nearest_neighbor_m</span>, fill <span class="op">=</span> <span class="va">sensor_id</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
@@ -471,6 +565,23 @@ epoch.</li>
 <code>mcp95_area_ha</code>: 95% minimum convex polygon home-range
 area (ha).</li>
 </ul>
+<p>How this works in practice:</p>
+<ul>
+<li>Epoch summaries aggregate row-level metrics to <code>day</code>,
+<code>week</code>, or <code>month</code>.</li>
+<li>Movement, social, and spatial blocks are merged on shared keys.</li>
+<li>Spatial area metrics are only meaningful with adequate fixes per
+epoch.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: over-interpreting area estimates from sparse days.<br>
+Check: screen by <code>n_fixes</code> before comparing
+<code>mcp95_area_ha</code>.</li>
+<li>Pitfall: combining epochs with different grazing contexts.<br>
+Check: facet/stratify by paddock, cohort, or treatment when
+available.</li>
+</ul>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">daily_metrics</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -507,6 +618,18 @@ area (ha).</li>
 </h2>
 <p><code><a href="../reference/grz_plot_diurnal_metrics.html">grz_plot_diurnal_metrics()</a></code> gives an interpretable view
 of how movement features vary by hour-of-day.</p>
+<p>How this works in practice:</p>
+<ul>
+<li>Hour-of-day aggregation is applied per metric and group.</li>
+<li>Heatmaps highlight temporal structure that is useful for threshold
+setting.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: timezone mismatch between sensor logging and ecological
+interpretation.<br>
+Check: set and verify timezone assumptions before diurnal plotting.</li>
+</ul>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/grz_plot_diurnal_metrics.html">grz_plot_diurnal_metrics</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps_social</span>,</span>

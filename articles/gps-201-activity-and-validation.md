@@ -74,6 +74,16 @@ gps <- grz_clean(
 )
 ```
 
+How this works in practice:
+
+- Start from already cleaned GPS rows with stable identifiers.
+- Keep example windows small enough to iterate quickly while tuning.
+
+Common pitfalls and checks:
+
+- Pitfall: tuning on too broad a window early on.  
+  Check: begin with one animal and a short period, then scale up.
+
 ## 3) Run consensus active/inactive classification
 
 [`grz_classify_activity_consensus()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.md)
@@ -125,6 +135,22 @@ Key state variables in this workflow:
 - `activity_state_spatial`: spatial clustering based estimate.
 - `activity_state_consensus`: final state after combining methods.
 - `inactive_score_consensus`: consensus inactivity score (0 to 1).
+
+How this works in practice:
+
+- HMM uses movement features to estimate latent activity states.
+- Spatial classifier identifies local dwell/stay behaviour from position
+  patterns.
+- Consensus combines both signals into a final `active`/`inactive`
+  decision.
+
+Common pitfalls and checks:
+
+- Pitfall: assuming one classifier is always correct.  
+  Check: inspect both component outputs (`hmm` and `spatial`) before
+  consensus.
+- Pitfall: class imbalance leading to misleading accuracy.  
+  Check: inspect class proportions by day and animal.
 
 ``` r
 gps_states %>%
@@ -215,6 +241,19 @@ editing:
 # labelled$datetime <- as.POSIXct(labelled$datetime, tz = "UTC")
 ```
 
+How this works in practice:
+
+- Manual labels provide ground truth for calibration and validation.
+- Labels should be saved with stable IDs so they can be reused across
+  sessions.
+
+Common pitfalls and checks:
+
+- Pitfall: relabelling the same points without versioning.  
+  Check: keep dated label files or append a reviewer/version column.
+- Pitfall: using ambiguous behaviour windows.  
+  Check: mark uncertain points as `NA` instead of forcing a label.
+
 ## 5) Demonstrate a prediction-vs-label comparison
 
 For a fully reproducible vignette, we create a synthetic `label` column
@@ -268,6 +307,22 @@ cat(
 )
 #> i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_state_hmm , ...
 ```
+
+How this works in practice:
+
+- Truth labels and predicted states are compared on the same rows.
+- Only valid binary states (`active`, `inactive`) are included for
+  scoring.
+
+Common pitfalls and checks:
+
+- Pitfall: comparing with stale predictions from different
+  preprocessing.  
+  Check: regenerate predictions from the same cleaned dataset used for
+  labels.
+- Pitfall: hidden leakage from copying predicted labels into truth
+  labels.  
+  Check: keep manually-labelled files separate from model outputs.
 
 ## 6) Tune parameters and rank the top 3 settings
 
@@ -334,6 +389,20 @@ top3
 #> 3                0.6               15                     10        802
 #> # ℹ 1 more variable: accuracy_percent <dbl>
 ```
+
+How this works in practice:
+
+- A parameter grid is evaluated with a consistent consensus rule.
+- Each setting is ranked by observed agreement against manual labels.
+- Top settings are candidates for holdout validation, not automatic
+  final choices.
+
+Common pitfalls and checks:
+
+- Pitfall: overfitting thresholds to a single week/animal.  
+  Check: validate top settings on held-out animals and periods.
+- Pitfall: choosing accuracy only.  
+  Check: also inspect confusion matrix and error type balance.
 
 ``` r
 results %>%
@@ -414,6 +483,17 @@ diagnostics <- grz_validate_behavior(
 [`grz_validate_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_behavior.md)
 returns state counts, transitions, bout summaries, and an optional PCA
 diagnostic for the selected state column.
+
+How this works in practice:
+
+- Transition and bout outputs help detect unstable state switching.
+- PCA and feature summaries help assess separation between labelled
+  states.
+
+Common pitfalls and checks:
+
+- Pitfall: interpreting PCA clusters as definitive behaviour classes.  
+  Check: use PCA as support, not as the sole decision criterion.
 
 ## Recommended Practice
 

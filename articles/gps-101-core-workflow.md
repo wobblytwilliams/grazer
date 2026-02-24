@@ -46,6 +46,21 @@ This vignette uses synthetic data so it is fully reproducible.
 In real projects, you would usually start with
 `grz_read_gps("your_file.csv")`.
 
+How this works in practice:
+
+- Keep raw ingest as close as possible to source files.
+- Add only minimal transformations before validation.
+- Preserve metadata columns so they can be used later in grouping and
+  summaries.
+
+Common pitfalls and checks:
+
+- Pitfall: parsing datetimes in local time by accident.  
+  Check: confirm all times are parsed in the same timezone (typically
+  UTC).
+- Pitfall: silently coercing text coordinates to `NA`.  
+  Check: inspect rows with missing/invalid `lon`/`lat` before cleaning.
+
 ``` r
 set.seed(101)
 
@@ -126,6 +141,23 @@ The validation object provides:
 - `invalid_rows`: full rows that failed validation checks, with
   `invalid_reason`.
 
+How this works in practice:
+
+- [`grz_validate()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate.md)
+  enforces the minimum schema (`sensor_id`, `datetime`, `lon`, `lat`).
+- It parses and type-checks each core field.
+- It records invalid reasons at row level so decisions are auditable.
+
+Common pitfalls and checks:
+
+- Pitfall: dropping invalid rows too early can hide data-logger
+  issues.  
+  Check: run once with `drop_invalid = FALSE` and inspect
+  `invalid_rows`.
+- Pitfall: blank `sensor_id` values across multiple animals.  
+  Check: verify `sensor_id` uniqueness and completeness before movement
+  metrics.
+
 ## 4) Clean the GPS rows
 
 This run applies four common cleaning steps:
@@ -163,6 +195,21 @@ head(gps_clean)
 #> 5       A01 2024-05-01 00:40:00 132.3050 -14.47372
 #> 6       A01 2024-05-01 00:50:00 132.3052 -14.47383
 ```
+
+How this works in practice:
+
+- Cleaning is intentionally drop-based and ordered.
+- Duplicate and invalid coordinate fixes are removed first.
+- Speed filtering removes biologically implausible jumps.
+- Denoising removes jitter during likely static periods.
+
+Common pitfalls and checks:
+
+- Pitfall: speed threshold too strict for your production class (e.g.,
+  mustering).  
+  Check: inspect upper speed tail before setting `max_speed_mps`.
+- Pitfall: aggressive denoising in coarse sampling intervals.  
+  Check: compare pre/post row counts by animal and day.
 
 ## 5) Calculate movement metrics (row-level)
 
@@ -207,6 +254,19 @@ Key movement variables:
 - `speed_mps`: step distance divided by elapsed time in seconds.
 - `turn_rad`: absolute turning angle (radians) between consecutive
   bearings.
+
+How this works in practice:
+
+- `step_m` is great-circle distance between consecutive fixes.
+- `speed_mps` is `step_m / step_dt_s`.
+- `turn_rad` uses the absolute difference in successive headings.
+
+Common pitfalls and checks:
+
+- Pitfall: irregular fix intervals inflate/deflate apparent speed.  
+  Check: inspect `step_dt_s` distribution.
+- Pitfall: first fix per track has no lag values.  
+  Check: expect `NA` in first row of each group for lag-derived metrics.
 
 ``` r
 gps_movement %>%
@@ -308,6 +368,24 @@ Key social variables:
 - `n_within_30m`: number of other animals within 30 m.
 - `mean_dist_to_others_m`: average distance to all other animals.
 
+How this works in practice:
+
+- For each timestamp (and optional herd partition), pairwise distances
+  are computed.
+- Nearest-neighbour metrics and threshold counts are derived from the
+  distance matrix.
+- Threshold columns (`n_within_*m`, `any_within_*m`) support
+  density/proximity interpretation.
+
+Common pitfalls and checks:
+
+- Pitfall: unsynchronised timestamps between collars.  
+  Check: use
+  [`grz_align()`](https://wobblytwilliams.github.io/grazer/reference/grz_align.md)
+  when needed before social metrics.
+- Pitfall: interpreting social isolation in very small group sizes.  
+  Check: inspect `social_group_size` before interpretation.
+
 ``` r
 gps_social_tbl %>%
   ggplot(aes(x = nearest_neighbor_m, fill = sensor_id)) +
@@ -390,6 +468,21 @@ Key summary variables:
 - `mean_nn_m`: mean nearest-neighbour distance over the epoch.
 - `mcp95_area_ha`: 95% minimum convex polygon home-range area (ha).
 
+How this works in practice:
+
+- Epoch summaries aggregate row-level metrics to `day`, `week`, or
+  `month`.
+- Movement, social, and spatial blocks are merged on shared keys.
+- Spatial area metrics are only meaningful with adequate fixes per
+  epoch.
+
+Common pitfalls and checks:
+
+- Pitfall: over-interpreting area estimates from sparse days.  
+  Check: screen by `n_fixes` before comparing `mcp95_area_ha`.
+- Pitfall: combining epochs with different grazing contexts.  
+  Check: facet/stratify by paddock, cohort, or treatment when available.
+
 ``` r
 daily_metrics %>%
   as_tibble() %>%
@@ -431,6 +524,18 @@ daily_metrics %>%
 [`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)
 gives an interpretable view of how movement features vary by
 hour-of-day.
+
+How this works in practice:
+
+- Hour-of-day aggregation is applied per metric and group.
+- Heatmaps highlight temporal structure that is useful for threshold
+  setting.
+
+Common pitfalls and checks:
+
+- Pitfall: timezone mismatch between sensor logging and ecological
+  interpretation.  
+  Check: set and verify timezone assumptions before diurnal plotting.
 
 ``` r
 grz_plot_diurnal_metrics(

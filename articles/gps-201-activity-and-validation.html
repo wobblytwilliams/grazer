@@ -145,6 +145,17 @@ process.</li>
 <span>  max_speed_mps <span class="op">=</span> <span class="fl">4</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p>How this works in practice:</p>
+<ul>
+<li>Start from already cleaned GPS rows with stable identifiers.</li>
+<li>Keep example windows small enough to iterate quickly while
+tuning.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: tuning on too broad a window early on.<br>
+Check: begin with one animal and a short period, then scale up.</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="run-consensus-activeinactive-classification">3) Run consensus active/inactive classification<a class="anchor" aria-label="anchor" href="#run-consensus-activeinactive-classification"></a>
@@ -204,6 +215,22 @@ methods.</li>
 <li>
 <code>inactive_score_consensus</code>: consensus inactivity score (0
 to 1).</li>
+</ul>
+<p>How this works in practice:</p>
+<ul>
+<li>HMM uses movement features to estimate latent activity states.</li>
+<li>Spatial classifier identifies local dwell/stay behaviour from
+position patterns.</li>
+<li>Consensus combines both signals into a final
+<code>active</code>/<code>inactive</code> decision.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: assuming one classifier is always correct.<br>
+Check: inspect both component outputs (<code>hmm</code> and
+<code>spatial</code>) before consensus.</li>
+<li>Pitfall: class imbalance leading to misleading accuracy.<br>
+Check: inspect class proportions by day and animal.</li>
 </ul>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_states</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -282,6 +309,21 @@ editing:</p>
 <code class="sourceCode R"><span><span class="co"># data.table::fwrite(labelled, "labelled_states.csv")</span></span>
 <span><span class="co"># labelled &lt;- data.table::fread("labelled_states.csv")</span></span>
 <span><span class="co"># labelled$datetime &lt;- as.POSIXct(labelled$datetime, tz = "UTC")</span></span></code></pre></div>
+<p>How this works in practice:</p>
+<ul>
+<li>Manual labels provide ground truth for calibration and
+validation.</li>
+<li>Labels should be saved with stable IDs so they can be reused across
+sessions.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: relabelling the same points without versioning.<br>
+Check: keep dated label files or append a reviewer/version column.</li>
+<li>Pitfall: using ambiguous behaviour windows.<br>
+Check: mark uncertain points as <code>NA</code> instead of forcing a
+label.</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="demonstrate-a-prediction-vs-label-comparison">5) Demonstrate a prediction-vs-label comparison<a class="anchor" aria-label="anchor" href="#demonstrate-a-prediction-vs-label-comparison"></a>
@@ -336,6 +378,23 @@ In your project, replace this with manual labels from
 <span>  <span class="st">"\n"</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt; i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_state_hmm , ...</span></span></code></pre></div>
+<p>How this works in practice:</p>
+<ul>
+<li>Truth labels and predicted states are compared on the same
+rows.</li>
+<li>Only valid binary states (<code>active</code>,
+<code>inactive</code>) are included for scoring.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: comparing with stale predictions from different
+preprocessing.<br>
+Check: regenerate predictions from the same cleaned dataset used for
+labels.</li>
+<li>Pitfall: hidden leakage from copying predicted labels into truth
+labels.<br>
+Check: keep manually-labelled files separate from model outputs.</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="tune-parameters-and-rank-the-top-3-settings">6) Tune parameters and rank the top 3 settings<a class="anchor" aria-label="anchor" href="#tune-parameters-and-rank-the-top-3-settings"></a>
@@ -402,6 +461,21 @@ In your project, replace this with manual labels from
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>                0.6               20                     20        802</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>                0.6               15                     10        802</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: accuracy_percent &lt;dbl&gt;</span></span></span></code></pre></div>
+<p>How this works in practice:</p>
+<ul>
+<li>A parameter grid is evaluated with a consistent consensus rule.</li>
+<li>Each setting is ranked by observed agreement against manual
+labels.</li>
+<li>Top settings are candidates for holdout validation, not automatic
+final choices.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: overfitting thresholds to a single week/animal.<br>
+Check: validate top settings on held-out animals and periods.</li>
+<li>Pitfall: choosing accuracy only.<br>
+Check: also inspect confusion matrix and error type balance.</li>
+</ul>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">results</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>accuracy_percent <span class="op">=</span> <span class="fl">100</span> <span class="op">*</span> <span class="va">accuracy</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -474,6 +548,19 @@ In your project, replace this with manual labels from
 <p><code><a href="../reference/grz_validate_behavior.html">grz_validate_behavior()</a></code> returns state counts,
 transitions, bout summaries, and an optional PCA diagnostic for the
 selected state column.</p>
+<p>How this works in practice:</p>
+<ul>
+<li>Transition and bout outputs help detect unstable state
+switching.</li>
+<li>PCA and feature summaries help assess separation between labelled
+states.</li>
+</ul>
+<p>Common pitfalls and checks:</p>
+<ul>
+<li>Pitfall: interpreting PCA clusters as definitive behaviour
+classes.<br>
+Check: use PCA as support, not as the sole decision criterion.</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="recommended-practice">Recommended Practice<a class="anchor" aria-label="anchor" href="#recommended-practice"></a>
