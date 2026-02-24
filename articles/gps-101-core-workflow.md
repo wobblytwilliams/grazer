@@ -2,7 +2,8 @@
 
 ## Overview
 
-This tutorial is a practical introduction to the `grazer` core pipeline:
+This tutorial walks through the main `grazer` workflow for cattle GPS
+data:
 
 1.  Start from GPS rows in canonical columns (`sensor_id`, `datetime`,
     `lon`, `lat`).
@@ -13,7 +14,7 @@ This tutorial is a practical introduction to the `grazer` core pipeline:
 
 ## Why This Workflow?
 
-A structured workflow helps avoid common analysis problems:
+A structured pipeline improves reproducibility and interpretation:
 
 - You detect data issues before model fitting.
 - You apply cleaning rules consistently across experiments.
@@ -21,16 +22,28 @@ A structured workflow helps avoid common analysis problems:
   deployments.
 - You keep row-level and day-level outputs aligned for QA and reporting.
 
-## 1) Load the package
+## 1) Load packages
 
 ``` r
 library(grazer)
+library(dplyr)
+#> 
+#> Attaching package: 'dplyr'
+#> The following objects are masked from 'package:stats':
+#> 
+#>     filter, lag
+#> The following objects are masked from 'package:base':
+#> 
+#>     intersect, setdiff, setequal, union
+library(tidyr)
+library(tibble)
+library(ggplot2)
 ```
 
 ## 2) Create an example GPS table
 
-This vignette builds synthetic data so it is fully reproducible.  
-In real projects you would typically call
+This vignette uses synthetic data so it is fully reproducible.  
+In real projects, you would usually start with
 `grz_read_gps("your_file.csv")`.
 
 ``` r
@@ -42,36 +55,41 @@ timestamps <- seq(
   length.out = 3 * 24 * 6
 )
 
-animal_ids <- c("A01", "A02", "A03")
-gps_raw <- data.frame()
+animal_info <- tibble(
+  sensor_id = c("A01", "A02", "A03"),
+  lon0 = c(132.305, 132.299, 132.311),
+  lat0 = c(-14.474, -14.471, -14.468)
+)
 
-for (i in seq_along(animal_ids)) {
-  one_animal <- data.frame(
-    sensor_id = animal_ids[i],
+gps_list <- list()
+for (i in seq_len(nrow(animal_info))) {
+  gps_list[[i]] <- tibble(
+    sensor_id = animal_info$sensor_id[i],
     datetime = timestamps,
-    lon = 132.30 + (i * 0.004) + cumsum(rnorm(length(timestamps), 0, 0.00018)),
-    lat = -14.47 - (i * 0.002) + cumsum(rnorm(length(timestamps), 0, 0.00015)),
-    stringsAsFactors = FALSE
+    lon = animal_info$lon0[i] + cumsum(rnorm(length(timestamps), 0, 0.00018)),
+    lat = animal_info$lat0[i] + cumsum(rnorm(length(timestamps), 0, 0.00015))
   )
-  gps_raw <- rbind(gps_raw, one_animal)
 }
+gps_raw <- bind_rows(gps_list)
 
 # Add a few realistic issues so validation and cleaning have visible effects.
-gps_raw <- rbind(gps_raw, gps_raw[1:5, ])   # duplicate rows
-gps_raw$lon[20] <- 0                         # invalid location (0,0)
+gps_raw <- bind_rows(gps_raw, gps_raw %>% slice(1:5)) # duplicate rows
+gps_raw$lon[20] <- 0                                  # invalid location (0,0)
 gps_raw$lat[20] <- 0
-gps_raw$datetime[33] <- NA                   # invalid datetime
+gps_raw$datetime[33] <- NA                            # invalid datetime
 
 nrow(gps_raw)
 #> [1] 1301
 head(gps_raw)
-#>   sensor_id            datetime      lon       lat
-#> 1       A01 2024-05-01 00:00:00 132.3039 -14.47195
-#> 2       A01 2024-05-01 00:10:00 132.3040 -14.47191
-#> 3       A01 2024-05-01 00:20:00 132.3039 -14.47179
-#> 4       A01 2024-05-01 00:30:00 132.3040 -14.47194
-#> 5       A01 2024-05-01 00:40:00 132.3040 -14.47172
-#> 6       A01 2024-05-01 00:50:00 132.3042 -14.47183
+#> # A tibble: 6 × 4
+#>   sensor_id datetime              lon   lat
+#>   <chr>     <dttm>              <dbl> <dbl>
+#> 1 A01       2024-05-01 00:00:00  132. -14.5
+#> 2 A01       2024-05-01 00:10:00  132. -14.5
+#> 3 A01       2024-05-01 00:20:00  132. -14.5
+#> 4 A01       2024-05-01 00:30:00  132. -14.5
+#> 5 A01       2024-05-01 00:40:00  132. -14.5
+#> 6 A01       2024-05-01 00:50:00  132. -14.5
 ```
 
 ## 3) Validate required columns and row values
@@ -99,8 +117,14 @@ validation_qc
 head(invalid_rows)
 #>    sensor_id datetime      lon       lat   invalid_reason
 #>       <char>   <POSc>    <num>     <num>           <char>
-#> 1:       A01     <NA> 132.3039 -14.47294 invalid_datetime
+#> 1:       A01     <NA> 132.3049 -14.47494 invalid_datetime
 ```
+
+The validation object provides:
+
+- `validation_qc`: counts/proportions of invalid records by issue type.
+- `invalid_rows`: full rows that failed validation checks, with
+  `invalid_reason`.
 
 ## 4) Clean the GPS rows
 
@@ -132,165 +156,293 @@ nrow(gps_clean)
 #> [1] 1186
 head(gps_clean)
 #>   sensor_id            datetime      lon       lat
-#> 1       A01 2024-05-01 00:00:00 132.3039 -14.47195
-#> 2       A01 2024-05-01 00:10:00 132.3040 -14.47191
-#> 3       A01 2024-05-01 00:20:00 132.3039 -14.47179
-#> 4       A01 2024-05-01 00:30:00 132.3040 -14.47194
-#> 5       A01 2024-05-01 00:40:00 132.3040 -14.47172
-#> 6       A01 2024-05-01 00:50:00 132.3042 -14.47183
+#> 1       A01 2024-05-01 00:00:00 132.3049 -14.47395
+#> 2       A01 2024-05-01 00:10:00 132.3050 -14.47391
+#> 3       A01 2024-05-01 00:20:00 132.3049 -14.47379
+#> 4       A01 2024-05-01 00:30:00 132.3050 -14.47394
+#> 5       A01 2024-05-01 00:40:00 132.3050 -14.47372
+#> 6       A01 2024-05-01 00:50:00 132.3052 -14.47383
 ```
 
-## 5) Calculate row-level movement and social metrics
+## 5) Calculate movement metrics (row-level)
 
 ``` r
 gps_movement <- grz_calculate_movement(gps_clean, verbose = FALSE)
-gps_metrics <- grz_calculate_social(gps_movement, interpolate = FALSE, verbose = FALSE)
 
-head(gps_metrics[, c(
-  "sensor_id", "datetime", "step_m", "speed_mps", "turn_rad",
-  "nearest_neighbor_m", "mean_dist_to_others_m"
-)])
-#>   sensor_id            datetime   step_m  speed_mps turn_rad nearest_neighbor_m
-#> 1       A01 2024-05-01 00:00:00       NA         NA       NA           507.0182
-#> 2       A01 2024-05-01 00:10:00 11.52811 0.01921351       NA           502.9769
-#> 3       A01 2024-05-01 00:20:00 18.13259 0.03022098 1.996812           502.3627
-#> 4       A01 2024-05-01 00:30:00 17.06946 0.02844910 2.581649           503.8102
-#> 5       A01 2024-05-01 00:40:00 25.51189 0.04251981 2.657424           513.6946
-#> 6       A01 2024-05-01 00:50:00 25.77840 0.04296399 1.821947           540.2254
-#>   mean_dist_to_others_m
-#> 1              740.5702
-#> 2              502.9769
-#> 3              726.3539
-#> 4              736.5660
-#> 5              754.7735
-#> 6              762.4748
+movement_view <- gps_movement %>%
+  as_tibble() %>%
+  select(sensor_id, datetime, step_m, speed_mps, turn_rad)
+
+movement_view
+#> # A tibble: 1,186 × 5
+#>    sensor_id datetime            step_m speed_mps turn_rad
+#>    <chr>     <dttm>               <dbl>     <dbl>    <dbl>
+#>  1 A01       2024-05-01 00:00:00   NA     NA        NA    
+#>  2 A01       2024-05-01 00:10:00   11.5    0.0192   NA    
+#>  3 A01       2024-05-01 00:20:00   18.1    0.0302    2.00 
+#>  4 A01       2024-05-01 00:30:00   17.1    0.0284    2.58 
+#>  5 A01       2024-05-01 00:40:00   25.5    0.0425    2.66 
+#>  6 A01       2024-05-01 00:50:00   25.8    0.0430    1.82 
+#>  7 A01       2024-05-01 01:00:00   12.1    0.0202    0.623
+#>  8 A01       2024-05-01 01:20:00   19.8    0.0165    0.532
+#>  9 A01       2024-05-01 01:40:00   12.3    0.0103    1.74 
+#> 10 A01       2024-05-01 01:50:00   15.6    0.0259    2.21 
+#> # ℹ 1,176 more rows
+
+movement_more <- setdiff(names(gps_movement), names(movement_view))
+cat(
+  "i",
+  length(movement_more),
+  "more columns:",
+  paste(head(movement_more, 10), collapse = ", "),
+  if (length(movement_more) > 10) ", ..." else "",
+  "\n"
+)
+#> i 6 more columns: lon, lat, step_dt_s, bearing_deg, cum_distance_m, net_displacement_m
 ```
 
-## 6) Summarise to day-level movement, social, and spatial outputs
+Key movement variables:
+
+- `step_m`: great-circle distance between consecutive fixes.
+- `speed_mps`: step distance divided by elapsed time in seconds.
+- `turn_rad`: absolute turning angle (radians) between consecutive
+  bearings.
+
+``` r
+gps_movement %>%
+  as_tibble() %>%
+  ggplot(aes(x = step_m, fill = sensor_id)) +
+  geom_histogram(bins = 40, alpha = 0.55, position = "identity") +
+  labs(
+    title = "Step Distance Distribution",
+    x = "Step distance (m)",
+    y = "Count",
+    fill = "Sensor ID"
+  ) +
+  theme_minimal()
+#> Warning: Removed 3 rows containing non-finite outside the scale range
+#> (`stat_bin()`).
+```
+
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-7-1.png)
+
+``` r
+gps_movement %>%
+  as_tibble() %>%
+  mutate(hour = as.integer(format(datetime, "%H", tz = "UTC"))) %>%
+  ggplot(aes(x = hour, y = speed_mps, color = sensor_id)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(se = FALSE, linewidth = 0.8) +
+  scale_x_continuous(breaks = seq(0, 23, by = 3)) +
+  labs(
+    title = "Diurnal Speed Pattern",
+    x = "Hour of day (UTC)",
+    y = "Speed (m/s)",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+#> `geom_smooth()` using method = 'loess' and formula = 'y ~ x'
+#> Warning: Removed 3 rows containing non-finite outside the scale range
+#> (`stat_smooth()`).
+#> Warning: Removed 3 rows containing missing values or values outside the scale range
+#> (`geom_point()`).
+```
+
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-8-1.png)
+
+## 6) Calculate social metrics (row-level)
+
+``` r
+gps_social <- grz_calculate_social(
+  gps_movement,
+  thresholds_m = c(30, 50, 100),
+  interpolate = FALSE,
+  verbose = FALSE
+)
+
+n30_col <- grep("^n_within_\\s*30m$", names(gps_social), value = TRUE)
+if (length(n30_col) == 0L) {
+  stop("Expected a 30 m neighbour count column after grz_calculate_social().")
+}
+
+gps_social_tbl <- gps_social %>%
+  as_tibble() %>%
+  mutate(n_within_30m = .data[[n30_col[[1]]]])
+
+social_view <- gps_social_tbl %>%
+  select(sensor_id, datetime, nearest_neighbor_m, n_within_30m, mean_dist_to_others_m)
+
+social_view
+#> # A tibble: 1,186 × 5
+#>    sensor_id datetime            nearest_neighbor_m n_within_30m
+#>    <chr>     <dttm>                           <dbl>        <int>
+#>  1 A01       2024-05-01 00:00:00               706.            0
+#>  2 A01       2024-05-01 00:10:00               711.            0
+#>  3 A01       2024-05-01 00:20:00               711.            0
+#>  4 A01       2024-05-01 00:30:00               708.            0
+#>  5 A01       2024-05-01 00:40:00               698.            0
+#>  6 A01       2024-05-01 00:50:00               672.            0
+#>  7 A01       2024-05-01 01:00:00               947.            0
+#>  8 A01       2024-05-01 01:20:00               678.            0
+#>  9 A01       2024-05-01 01:40:00               736.            0
+#> 10 A01       2024-05-01 01:50:00               959.            0
+#> # ℹ 1,176 more rows
+#> # ℹ 1 more variable: mean_dist_to_others_m <dbl>
+
+social_more <- setdiff(names(gps_social), names(social_view))
+cat(
+  "i",
+  length(social_more),
+  "more columns:",
+  paste(head(social_more, 10), collapse = ", "),
+  if (length(social_more) > 10) ", ..." else "",
+  "\n"
+)
+#> i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, social_group_size , ...
+```
+
+Key social variables:
+
+- `nearest_neighbor_m`: distance to closest other animal at matching
+  timestamp.
+- `n_within_30m`: number of other animals within 30 m.
+- `mean_dist_to_others_m`: average distance to all other animals.
+
+``` r
+gps_social_tbl %>%
+  ggplot(aes(x = nearest_neighbor_m, fill = sensor_id)) +
+  geom_density(alpha = 0.35) +
+  labs(
+    title = "Nearest-Neighbour Distance Density",
+    x = "Nearest neighbour distance (m)",
+    y = "Density",
+    fill = "Sensor ID"
+  ) +
+  theme_minimal()
+#> Warning: Removed 6 rows containing non-finite outside the scale range
+#> (`stat_density()`).
+```
+
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-10-1.png)
+
+``` r
+gps_social_tbl %>%
+  mutate(day = as.Date(datetime)) %>%
+  group_by(sensor_id, day) %>%
+  summarise(mean_n_within_30m = mean(n_within_30m, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = day, y = mean_n_within_30m, color = sensor_id)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.8) +
+  labs(
+    title = "Daily Mean Number of Animals Within 30 m",
+    x = "Day",
+    y = "Mean n_within_30m",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png)
+
+## 7) Summarise to day-level movement, social, and spatial outputs
 
 ``` r
 daily_metrics <- grz_calculate_epoch_metrics(
-  data = gps_metrics,
+  data = gps_social,
   epoch = "day",
   include = c("movement", "social", "spatial"),
   verbose = FALSE
 )
 
-daily_metrics
-#>   sensor_id      epoch n_fixes total_distance_m mean_step_m median_step_m
-#> 1       A01 2024-05-01     134         3132.873    23.55544      20.81554
-#> 2       A01 2024-05-02     122         2650.702    21.72707      19.68335
-#> 3       A01 2024-05-03     134         3243.565    24.20571      23.53400
-#> 4       A02 2024-05-01     131         3455.125    26.57789      26.15696
-#> 5       A02 2024-05-02     138         3369.007    24.41309      22.22398
-#> 6       A02 2024-05-03     131         3459.795    26.41065      24.56899
-#> 7       A03 2024-05-01     135         3370.273    25.15129      22.91217
-#> 8       A03 2024-05-02     132         2989.238    22.64574      21.35027
-#> 9       A03 2024-05-03     129         3059.136    23.71423      21.51194
-#>   p95_step_m mean_speed_mps p95_speed_mps max_speed_mps mean_abs_turn_rad
-#> 1   42.30171     0.03740605    0.06877027    0.07968321          1.528619
-#> 2   42.95296     0.03330009    0.07030039    0.09528840          1.592599
-#> 3   42.28486     0.03894213    0.07047477    0.10514065          1.603855
-#> 4   47.72869     0.04214338    0.07485512    0.11071979          1.678684
-#> 5   43.08025     0.03988782    0.07119755    0.09133846          1.545299
-#> 6   49.24512     0.04236014    0.08207520    0.10820711          1.538815
-#> 7   47.28117     0.04002761    0.07659921    0.10995727          1.568127
-#> 8   41.62788     0.03608192    0.06734519    0.08752319          1.542835
-#> 9   44.33423     0.03689340    0.07215069    0.11369144          1.672228
-#>   social_n_fixes mean_nn_m p50_nn_m mean_dist_to_others_m
-#> 1            134  769.2329 815.6995              863.8375
-#> 2            122  902.9607 900.5049              957.4817
-#> 3            134  870.5431 860.7784             1095.2608
-#> 4            131  366.0400 296.3314              559.0056
-#> 5            138  323.1694 287.9136              604.4207
-#> 6            131  635.6847 680.8530              761.0322
-#> 7            135  399.2312 298.6138              654.6165
-#> 8            132  302.3545 285.7099              563.0773
-#> 9            129  735.4497 740.3027             1035.5359
-#>   mean_n_within_           25m mean_n_within_           30m
-#> 1                            0                            0
-#> 2                            0                            0
-#> 3                            0                            0
-#> 4                            0                            0
-#> 5                            0                            0
-#> 6                            0                            0
-#> 7                            0                            0
-#> 8                            0                            0
-#> 9                            0                            0
-#>   mean_n_within_           50m mean_n_within_          100m
-#> 1                            0                            0
-#> 2                            0                            0
-#> 3                            0                            0
-#> 4                            0                            0
-#> 5                            0                            0
-#> 6                            0                            0
-#> 7                            0                            0
-#> 8                            0                            0
-#> 9                            0                            0
-#>   prop_any_within_           25m prop_any_within_           30m
-#> 1                              0                              0
-#> 2                              0                              0
-#> 3                              0                              0
-#> 4                              0                              0
-#> 5                              0                              0
-#> 6                              0                              0
-#> 7                              0                              0
-#> 8                              0                              0
-#> 9                              0                              0
-#>   prop_any_within_           50m prop_any_within_          100m spatial_n_fixes
-#> 1                              0                              0             134
-#> 2                              0                              0             122
-#> 3                              0                              0             134
-#> 4                              0                              0             131
-#> 5                              0                              0             138
-#> 6                              0                              0             131
-#> 7                              0                              0             135
-#> 8                              0                              0             132
-#> 9                              0                              0             129
-#>   span_hours mcp100_area_ha mcp95_area_ha  kde95_ha
-#> 1   23.83333       4.808943      4.321158  8.048117
-#> 2   23.83333       5.521516      5.315512  7.818676
-#> 3   23.83333       5.171636      4.911483  8.014663
-#> 4   23.83333       6.443654      6.013205 10.647315
-#> 5   23.83333       8.997431      8.077120 17.619046
-#> 6   23.83333       4.651171      4.355067  7.709534
-#> 7   23.83333       6.926231      6.625744 11.165264
-#> 8   23.66667       6.765488      6.352339 12.957912
-#> 9   23.83333       8.796936      8.537822 14.950112
+summary_view <- daily_metrics %>%
+  as_tibble() %>%
+  select(sensor_id, epoch, total_distance_m, mean_nn_m, mcp95_area_ha)
+
+summary_view
+#> # A tibble: 9 × 5
+#>   sensor_id epoch      total_distance_m mean_nn_m mcp95_area_ha
+#>   <chr>     <chr>                 <dbl>     <dbl>         <dbl>
+#> 1 A01       2024-05-01            3133.      792.          4.32
+#> 2 A01       2024-05-02            2651.      871.          5.32
+#> 3 A01       2024-05-03            3244.      814.          4.91
+#> 4 A02       2024-05-01            3455.      782.          6.01
+#> 5 A02       2024-05-02            3369.      802.          8.08
+#> 6 A02       2024-05-03            3460.      776.          4.36
+#> 7 A03       2024-05-01            3370.     1050.          6.63
+#> 8 A03       2024-05-02            2989.      980.          6.35
+#> 9 A03       2024-05-03            3059.     1697.          8.54
+
+summary_more <- setdiff(names(daily_metrics), names(summary_view))
+cat(
+  "i",
+  length(summary_more),
+  "more columns:",
+  paste(head(summary_more, 10), collapse = ", "),
+  if (length(summary_more) > 10) ", ..." else "",
+  "\n"
+)
+#> i 21 more columns: n_fixes, mean_step_m, median_step_m, p95_step_m, mean_speed_mps, p95_speed_mps, max_speed_mps, mean_abs_turn_rad, social_n_fixes, p50_nn_m , ...
 ```
 
-## 7) Plot key features for quick QA
+Key summary variables:
 
-Use quick plots to check whether values are biologically reasonable.
+- `total_distance_m`: total distance moved over the epoch.
+- `mean_nn_m`: mean nearest-neighbour distance over the epoch.
+- `mcp95_area_ha`: 95% minimum convex polygon home-range area (ha).
 
 ``` r
-par(mfrow = c(1, 2))
+daily_metrics %>%
+  as_tibble() %>%
+  mutate(epoch = as.Date(epoch)) %>%
+  ggplot(aes(x = epoch, y = total_distance_m, color = sensor_id, group = sensor_id)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2) +
+  labs(
+    title = "Daily Total Distance by Animal",
+    x = "Day",
+    y = "Total distance (m)",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
 
-hist(
-  gps_metrics$step_m,
-  breaks = 40,
-  main = "Step Distance (m)",
-  xlab = "step_m",
-  col = "grey80",
-  border = "white"
-)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-13-1.png)
 
-hist(
-  gps_metrics$speed_mps,
-  breaks = 40,
-  main = "Speed (m/s)",
-  xlab = "speed_mps",
-  col = "grey80",
-  border = "white"
+``` r
+daily_metrics %>%
+  as_tibble() %>%
+  mutate(epoch = as.Date(epoch)) %>%
+  ggplot(aes(x = epoch, y = mcp95_area_ha, color = sensor_id, group = sensor_id)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2) +
+  labs(
+    title = "Daily 95% MCP Area by Animal",
+    x = "Day",
+    y = "MCP95 area (ha)",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-14-1.png)
+
+## 8) Diurnal feature plots
+
+[`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)
+gives an interpretable view of how movement features vary by
+hour-of-day.
+
+``` r
+grz_plot_diurnal_metrics(
+  data = gps_social,
+  metrics = c("step_m", "turn_rad"),
+  group_col = "sensor_id",
+  agg_fun = "median",
+  scale = "none"
 )
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-8-1.png)
-
-``` r
-
-par(mfrow = c(1, 1))
-```
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png)
 
 ## Next Step
 
@@ -300,3 +452,14 @@ Continue to the 201 tutorial for:
 - manual state labelling with
   [`grz_label_gps_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_label_gps_states.md),
 - and prediction-vs-label validation.
+
+## References
+
+- Sinnott, R. W. (1984). *Virtues of the Haversine*. Sky and Telescope,
+  68(2), 159.  
+  Distance calculations in `grazer` use the great-circle (haversine)
+  approach.
+- Burt, W. H. (1943). *Territoriality and home range concepts as applied
+  to mammals*.  
+  Journal of Mammalogy, 24(3), 346-352.  
+  Conceptual basis for home-range summaries such as MCP.
