@@ -328,7 +328,7 @@ grz_plot_diurnal_metrics(
   metrics = c("step_m", "turn_rad"),
   group_col = "sensor_id",
   agg_fun = "median",
-  value_transform = "none"
+  scale = "none"
 )
 ```
 
