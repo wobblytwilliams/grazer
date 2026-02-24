@@ -23,12 +23,11 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           dependencies: '"hard"'
-          extra-packages: |
-            any::pkgdown
-            any::ggplot2
-            any::dplyr
-            any::tibble
-            any::tidyr
+          extra-packages: any::pkgdown
+
+      - name: Install tutorial dependencies
+        run: install.packages(c("ggplot2", "dplyr", "tibble", "tidyr"), repos = "https://cloud.r-project.org")
+        shell: Rscript {0}
 
       - name: Install grazer package
         run: R CMD INSTALL . --no-multiarch --no-test-load
