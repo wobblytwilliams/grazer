@@ -1,19 +1,19 @@
 url: https://wobblytwilliams.github.io/grazer/
-
 template:
   bootstrap: 5
-
 navbar:
   structure:
-    left: [intro, reference, articles]
-    right: [github]
+    left:
+    - intro
+    - reference
+    - articles
+    right: github
   components:
     github:
       icon: fa-github
       href: https://github.com/wobblytwilliams/grazer
-
 articles:
-  - title: Tutorials
-    navbar: Tutorials
-    contents:
-      - end-to-end-workflow
+- title: Tutorials
+  navbar: Tutorials
+  contents: end-to-end-workflow
+
