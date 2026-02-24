@@ -197,8 +197,16 @@ gps_social <- grz_calculate_social(
   verbose = FALSE
 )
 
-social_view <- gps_social %>%
+n30_col <- grep("^n_within_\\s*30m$", names(gps_social), value = TRUE)
+if (length(n30_col) == 0L) {
+  stop("Expected a 30 m neighbour count column after grz_calculate_social().")
+}
+
+gps_social_tbl <- gps_social %>%
   as_tibble() %>%
+  mutate(n_within_30m = .data[[n30_col[[1]]]])
+
+social_view <- gps_social_tbl %>%
   select(sensor_id, datetime, nearest_neighbor_m, n_within_30m, mean_dist_to_others_m)
 
 social_view
@@ -221,8 +229,7 @@ Key social variables:
 - `mean_dist_to_others_m`: average distance to all other animals.
 
 ```{r}
-gps_social %>%
-  as_tibble() %>%
+gps_social_tbl %>%
   ggplot(aes(x = nearest_neighbor_m, fill = sensor_id)) +
   geom_density(alpha = 0.35) +
   labs(
@@ -235,8 +242,7 @@ gps_social %>%
 ```
 
 ```{r}
-gps_social %>%
-  as_tibble() %>%
+gps_social_tbl %>%
   mutate(day = as.Date(datetime)) %>%
   group_by(sensor_id, day) %>%
   summarise(mean_n_within_30m = mean(n_within_30m, na.rm = TRUE), .groups = "drop") %>%

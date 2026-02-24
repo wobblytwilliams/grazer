@@ -17,7 +17,7 @@ grz_mean_or_na <- function(x) {
 }
 
 grz_threshold_label <- function(x) {
-  gsub("\\.", "_", formatC(x, digits = 12, format = "fg", drop0trailing = TRUE))
+  gsub("\\.", "_", trimws(formatC(x, digits = 12, format = "fg", drop0trailing = TRUE)))
 }
 
 grz_merge_metric_tables <- function(...) {
