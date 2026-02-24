@@ -23,7 +23,12 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           dependencies: '"hard"'
-          extra-packages: any::pkgdown
+          extra-packages: |
+            any::pkgdown
+            any::ggplot2
+            any::dplyr
+            any::tibble
+            any::tidyr
 
       - name: Install grazer package
         run: R CMD INSTALL . --no-multiarch --no-test-load

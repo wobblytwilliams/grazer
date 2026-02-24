@@ -16,6 +16,7 @@ Imports:
     tools
 Suggests:
     arrow,
+    dplyr,
     ggplot2,
     knitr,
     leaflet,
@@ -26,5 +27,7 @@ Suggests:
     jsonlite,
     rmarkdown,
     shiny,
-    sf
+    sf,
+    tibble,
+    tidyr
 VignetteBuilder: knitr

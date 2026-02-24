@@ -10,13 +10,15 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 8,
+  fig.height = 5
 )
 ```
 
 ## Overview
 
-This tutorial is a practical introduction to the `grazer` core pipeline:
+This tutorial walks through the main `grazer` workflow for cattle GPS data:
 
 1. Start from GPS rows in canonical columns (`sensor_id`, `datetime`, `lon`, `lat`).
 2. Validate required schema and data types.
@@ -26,23 +28,27 @@ This tutorial is a practical introduction to the `grazer` core pipeline:
 
 ## Why This Workflow?
 
-A structured workflow helps avoid common analysis problems:
+A structured pipeline improves reproducibility and interpretation:
 
 - You detect data issues before model fitting.
 - You apply cleaning rules consistently across experiments.
 - You generate comparable metrics across paddocks, cohorts, and deployments.
 - You keep row-level and day-level outputs aligned for QA and reporting.
 
-## 1) Load the package
+## 1) Load packages
 
 ```{r}
 library(grazer)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
 ```
 
 ## 2) Create an example GPS table
 
-This vignette builds synthetic data so it is fully reproducible.  
-In real projects you would typically call `grz_read_gps("your_file.csv")`.
+This vignette uses synthetic data so it is fully reproducible.  
+In real projects, you would usually start with `grz_read_gps("your_file.csv")`.
 
 ```{r}
 set.seed(101)
@@ -53,25 +59,28 @@ timestamps <- seq(
   length.out = 3 * 24 * 6
 )
 
-animal_ids <- c("A01", "A02", "A03")
-gps_raw <- data.frame()
+animal_info <- tibble(
+  sensor_id = c("A01", "A02", "A03"),
+  lon0 = c(132.305, 132.299, 132.311),
+  lat0 = c(-14.474, -14.471, -14.468)
+)
 
-for (i in seq_along(animal_ids)) {
-  one_animal <- data.frame(
-    sensor_id = animal_ids[i],
+gps_list <- list()
+for (i in seq_len(nrow(animal_info))) {
+  gps_list[[i]] <- tibble(
+    sensor_id = animal_info$sensor_id[i],
     datetime = timestamps,
-    lon = 132.30 + (i * 0.004) + cumsum(rnorm(length(timestamps), 0, 0.00018)),
-    lat = -14.47 - (i * 0.002) + cumsum(rnorm(length(timestamps), 0, 0.00015)),
-    stringsAsFactors = FALSE
+    lon = animal_info$lon0[i] + cumsum(rnorm(length(timestamps), 0, 0.00018)),
+    lat = animal_info$lat0[i] + cumsum(rnorm(length(timestamps), 0, 0.00015))
   )
-  gps_raw <- rbind(gps_raw, one_animal)
 }
+gps_raw <- bind_rows(gps_list)
 
 # Add a few realistic issues so validation and cleaning have visible effects.
-gps_raw <- rbind(gps_raw, gps_raw[1:5, ])   # duplicate rows
-gps_raw$lon[20] <- 0                         # invalid location (0,0)
+gps_raw <- bind_rows(gps_raw, gps_raw %>% slice(1:5)) # duplicate rows
+gps_raw$lon[20] <- 0                                  # invalid location (0,0)
 gps_raw$lat[20] <- 0
-gps_raw$datetime[33] <- NA                   # invalid datetime
+gps_raw$datetime[33] <- NA                            # invalid datetime
 
 nrow(gps_raw)
 head(gps_raw)
@@ -92,6 +101,11 @@ invalid_rows <- attr(gps_valid, "invalid_rows")
 validation_qc
 head(invalid_rows)
 ```
+
+The validation object provides:
+
+- `validation_qc`: counts/proportions of invalid records by issue type.
+- `invalid_rows`: full rows that failed validation checks, with `invalid_reason`.
 
 ## 4) Clean the GPS rows
 
@@ -114,57 +128,208 @@ nrow(gps_clean)
 head(gps_clean)
 ```
 
-## 5) Calculate row-level movement and social metrics
+## 5) Calculate movement metrics (row-level)
 
 ```{r}
 gps_movement <- grz_calculate_movement(gps_clean, verbose = FALSE)
-gps_metrics <- grz_calculate_social(gps_movement, interpolate = FALSE, verbose = FALSE)
 
-head(gps_metrics[, c(
-  "sensor_id", "datetime", "step_m", "speed_mps", "turn_rad",
-  "nearest_neighbor_m", "mean_dist_to_others_m"
-)])
+movement_view <- gps_movement %>%
+  as_tibble() %>%
+  select(sensor_id, datetime, step_m, speed_mps, turn_rad)
+
+movement_view
+
+movement_more <- setdiff(names(gps_movement), names(movement_view))
+cat(
+  "i",
+  length(movement_more),
+  "more columns:",
+  paste(head(movement_more, 10), collapse = ", "),
+  if (length(movement_more) > 10) ", ..." else "",
+  "\n"
+)
 ```
 
-## 6) Summarise to day-level movement, social, and spatial outputs
+Key movement variables:
+
+- `step_m`: great-circle distance between consecutive fixes.
+- `speed_mps`: step distance divided by elapsed time in seconds.
+- `turn_rad`: absolute turning angle (radians) between consecutive bearings.
+
+```{r}
+gps_movement %>%
+  as_tibble() %>%
+  ggplot(aes(x = step_m, fill = sensor_id)) +
+  geom_histogram(bins = 40, alpha = 0.55, position = "identity") +
+  labs(
+    title = "Step Distance Distribution",
+    x = "Step distance (m)",
+    y = "Count",
+    fill = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+gps_movement %>%
+  as_tibble() %>%
+  mutate(hour = as.integer(format(datetime, "%H", tz = "UTC"))) %>%
+  ggplot(aes(x = hour, y = speed_mps, color = sensor_id)) +
+  geom_point(alpha = 0.25, size = 1) +
+  geom_smooth(se = FALSE, linewidth = 0.8) +
+  scale_x_continuous(breaks = seq(0, 23, by = 3)) +
+  labs(
+    title = "Diurnal Speed Pattern",
+    x = "Hour of day (UTC)",
+    y = "Speed (m/s)",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+## 6) Calculate social metrics (row-level)
+
+```{r}
+gps_social <- grz_calculate_social(
+  gps_movement,
+  thresholds_m = c(30, 50, 100),
+  interpolate = FALSE,
+  verbose = FALSE
+)
+
+social_view <- gps_social %>%
+  as_tibble() %>%
+  select(sensor_id, datetime, nearest_neighbor_m, n_within_30m, mean_dist_to_others_m)
+
+social_view
+
+social_more <- setdiff(names(gps_social), names(social_view))
+cat(
+  "i",
+  length(social_more),
+  "more columns:",
+  paste(head(social_more, 10), collapse = ", "),
+  if (length(social_more) > 10) ", ..." else "",
+  "\n"
+)
+```
+
+Key social variables:
+
+- `nearest_neighbor_m`: distance to closest other animal at matching timestamp.
+- `n_within_30m`: number of other animals within 30 m.
+- `mean_dist_to_others_m`: average distance to all other animals.
+
+```{r}
+gps_social %>%
+  as_tibble() %>%
+  ggplot(aes(x = nearest_neighbor_m, fill = sensor_id)) +
+  geom_density(alpha = 0.35) +
+  labs(
+    title = "Nearest-Neighbour Distance Density",
+    x = "Nearest neighbour distance (m)",
+    y = "Density",
+    fill = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+gps_social %>%
+  as_tibble() %>%
+  mutate(day = as.Date(datetime)) %>%
+  group_by(sensor_id, day) %>%
+  summarise(mean_n_within_30m = mean(n_within_30m, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = day, y = mean_n_within_30m, color = sensor_id)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.8) +
+  labs(
+    title = "Daily Mean Number of Animals Within 30 m",
+    x = "Day",
+    y = "Mean n_within_30m",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+## 7) Summarise to day-level movement, social, and spatial outputs
 
 ```{r}
 daily_metrics <- grz_calculate_epoch_metrics(
-  data = gps_metrics,
+  data = gps_social,
   epoch = "day",
   include = c("movement", "social", "spatial"),
   verbose = FALSE
 )
 
-daily_metrics
+summary_view <- daily_metrics %>%
+  as_tibble() %>%
+  select(sensor_id, epoch, total_distance_m, mean_nn_m, mcp95_area_ha)
+
+summary_view
+
+summary_more <- setdiff(names(daily_metrics), names(summary_view))
+cat(
+  "i",
+  length(summary_more),
+  "more columns:",
+  paste(head(summary_more, 10), collapse = ", "),
+  if (length(summary_more) > 10) ", ..." else "",
+  "\n"
+)
 ```
 
-## 7) Plot key features for quick QA
+Key summary variables:
 
-Use quick plots to check whether values are biologically reasonable.
+- `total_distance_m`: total distance moved over the epoch.
+- `mean_nn_m`: mean nearest-neighbour distance over the epoch.
+- `mcp95_area_ha`: 95% minimum convex polygon home-range area (ha).
 
 ```{r}
-par(mfrow = c(1, 2))
+daily_metrics %>%
+  as_tibble() %>%
+  mutate(epoch = as.Date(epoch)) %>%
+  ggplot(aes(x = epoch, y = total_distance_m, color = sensor_id, group = sensor_id)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2) +
+  labs(
+    title = "Daily Total Distance by Animal",
+    x = "Day",
+    y = "Total distance (m)",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
 
-hist(
-  gps_metrics$step_m,
-  breaks = 40,
-  main = "Step Distance (m)",
-  xlab = "step_m",
-  col = "grey80",
-  border = "white"
+```{r}
+daily_metrics %>%
+  as_tibble() %>%
+  mutate(epoch = as.Date(epoch)) %>%
+  ggplot(aes(x = epoch, y = mcp95_area_ha, color = sensor_id, group = sensor_id)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2) +
+  labs(
+    title = "Daily 95% MCP Area by Animal",
+    x = "Day",
+    y = "MCP95 area (ha)",
+    color = "Sensor ID"
+  ) +
+  theme_minimal()
+```
+
+## 8) Diurnal feature plots
+
+`grz_plot_diurnal_metrics()` gives an interpretable view of how movement
+features vary by hour-of-day.
+
+```{r}
+grz_plot_diurnal_metrics(
+  data = gps_social,
+  metrics = c("step_m", "turn_rad"),
+  group_col = "sensor_id",
+  agg_fun = "median",
+  value_transform = "none"
 )
-
-hist(
-  gps_metrics$speed_mps,
-  breaks = 40,
-  main = "Speed (m/s)",
-  xlab = "speed_mps",
-  col = "grey80",
-  border = "white"
-)
-
-par(mfrow = c(1, 1))
 ```
 
 ## Next Step
@@ -174,3 +339,11 @@ Continue to the 201 tutorial for:
 - active/inactive classification,
 - manual state labelling with `grz_label_gps_states()`,
 - and prediction-vs-label validation.
+
+## References
+
+- Sinnott, R. W. (1984). *Virtues of the Haversine*. Sky and Telescope, 68(2), 159.  
+  Distance calculations in `grazer` use the great-circle (haversine) approach.
+- Burt, W. H. (1943). *Territoriality and home range concepts as applied to mammals*.  
+  Journal of Mammalogy, 24(3), 346-352.  
+  Conceptual basis for home-range summaries such as MCP.
