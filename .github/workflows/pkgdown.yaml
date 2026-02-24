@@ -20,12 +20,16 @@ jobs:
         with:
           use-public-rspm: true
 
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          dependencies: '"hard"'
+          extra-packages: any::pkgdown
+
+      - name: Install grazer package
+        run: R CMD INSTALL . --no-multiarch --no-test-load
+
       - name: Build pkgdown site
         run: |
-          options(repos = c(CRAN = "https://cloud.r-project.org"))
-          install.packages(c("remotes", "pkgdown", "knitr", "rmarkdown"), dependencies = NA)
-          remotes::install_deps(dependencies = NA, upgrade = "never")
-          remotes::install_local(dependencies = FALSE, upgrade = "never", force = TRUE)
           stopifnot(requireNamespace("pkgdown", quietly = TRUE))
           pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
