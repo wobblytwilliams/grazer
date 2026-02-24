@@ -1,0 +1,176 @@
+---
+title: "GPS 101: Core Workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{GPS 101: Core Workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+This tutorial is a practical introduction to the `grazer` core pipeline:
+
+1. Start from GPS rows in canonical columns (`sensor_id`, `datetime`, `lon`, `lat`).
+2. Validate required schema and data types.
+3. Clean obvious errors and noise.
+4. Calculate movement, social, and spatial metrics.
+5. Summarise results to daily metrics for interpretation.
+
+## Why This Workflow?
+
+A structured workflow helps avoid common analysis problems:
+
+- You detect data issues before model fitting.
+- You apply cleaning rules consistently across experiments.
+- You generate comparable metrics across paddocks, cohorts, and deployments.
+- You keep row-level and day-level outputs aligned for QA and reporting.
+
+## 1) Load the package
+
+```{r}
+library(grazer)
+```
+
+## 2) Create an example GPS table
+
+This vignette builds synthetic data so it is fully reproducible.  
+In real projects you would typically call `grz_read_gps("your_file.csv")`.
+
+```{r}
+set.seed(101)
+
+timestamps <- seq(
+  from = as.POSIXct("2024-05-01 00:00:00", tz = "UTC"),
+  by = "10 min",
+  length.out = 3 * 24 * 6
+)
+
+animal_ids <- c("A01", "A02", "A03")
+gps_raw <- data.frame()
+
+for (i in seq_along(animal_ids)) {
+  one_animal <- data.frame(
+    sensor_id = animal_ids[i],
+    datetime = timestamps,
+    lon = 132.30 + (i * 0.004) + cumsum(rnorm(length(timestamps), 0, 0.00018)),
+    lat = -14.47 - (i * 0.002) + cumsum(rnorm(length(timestamps), 0, 0.00015)),
+    stringsAsFactors = FALSE
+  )
+  gps_raw <- rbind(gps_raw, one_animal)
+}
+
+# Add a few realistic issues so validation and cleaning have visible effects.
+gps_raw <- rbind(gps_raw, gps_raw[1:5, ])   # duplicate rows
+gps_raw$lon[20] <- 0                         # invalid location (0,0)
+gps_raw$lat[20] <- 0
+gps_raw$datetime[33] <- NA                   # invalid datetime
+
+nrow(gps_raw)
+head(gps_raw)
+```
+
+## 3) Validate required columns and row values
+
+```{r}
+gps_valid <- grz_validate(
+  data = gps_raw,
+  drop_invalid = FALSE,
+  verbose = TRUE
+)
+
+validation_qc <- attr(gps_valid, "validation_qc")
+invalid_rows <- attr(gps_valid, "invalid_rows")
+
+validation_qc
+head(invalid_rows)
+```
+
+## 4) Clean the GPS rows
+
+This run applies four common cleaning steps:
+
+- `duplicates`: removes repeated fixes.
+- `errors`: drops invalid coordinates and malformed rows.
+- `speed_fixed`: removes biologically implausible moves.
+- `denoise`: reduces local GPS bounce in static periods.
+
+```{r}
+gps_clean <- grz_clean(
+  data = gps_valid,
+  steps = c("duplicates", "errors", "speed_fixed", "denoise"),
+  max_speed_mps = 4,
+  verbose = TRUE
+)
+
+nrow(gps_clean)
+head(gps_clean)
+```
+
+## 5) Calculate row-level movement and social metrics
+
+```{r}
+gps_movement <- grz_calculate_movement(gps_clean, verbose = FALSE)
+gps_metrics <- grz_calculate_social(gps_movement, interpolate = FALSE, verbose = FALSE)
+
+head(gps_metrics[, c(
+  "sensor_id", "datetime", "step_m", "speed_mps", "turn_rad",
+  "nearest_neighbor_m", "mean_dist_to_others_m"
+)])
+```
+
+## 6) Summarise to day-level movement, social, and spatial outputs
+
+```{r}
+daily_metrics <- grz_calculate_epoch_metrics(
+  data = gps_metrics,
+  epoch = "day",
+  include = c("movement", "social", "spatial"),
+  verbose = FALSE
+)
+
+daily_metrics
+```
+
+## 7) Plot key features for quick QA
+
+Use quick plots to check whether values are biologically reasonable.
+
+```{r}
+par(mfrow = c(1, 2))
+
+hist(
+  gps_metrics$step_m,
+  breaks = 40,
+  main = "Step Distance (m)",
+  xlab = "step_m",
+  col = "grey80",
+  border = "white"
+)
+
+hist(
+  gps_metrics$speed_mps,
+  breaks = 40,
+  main = "Speed (m/s)",
+  xlab = "speed_mps",
+  col = "grey80",
+  border = "white"
+)
+
+par(mfrow = c(1, 1))
+```
+
+## Next Step
+
+Continue to the 201 tutorial for:
+
+- active/inactive classification,
+- manual state labelling with `grz_label_gps_states()`,
+- and prediction-vs-label validation.

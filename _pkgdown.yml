@@ -16,4 +16,5 @@ articles:
   - title: Tutorials
     navbar: Tutorials
     contents:
-      - end-to-end-workflow
+      - gps-101-core-workflow
+      - gps-201-activity-and-validation
