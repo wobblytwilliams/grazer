@@ -8,8 +8,12 @@ navbar:
     left: [intro, reference, articles]
     right: [github]
   components:
+    intro:
+      text: "<img src='logo.png' alt='grazer logo' height='26'/> grazer"
+      href: index.html
     github:
       icon: fa-github
+      aria-label: GitHub repository
       href: https://github.com/wobblytwilliams/grazer
 
 articles:

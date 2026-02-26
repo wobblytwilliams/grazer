@@ -1,4 +1,4 @@
-# grazer
+# grazer <img src="man/figures/logo.png" align="right" height="140" alt="grazer logo" />
 
 `grazer` provides tools to ingest, clean, map, and analyse GPS data from cattle grazing experiments.
 
