@@ -14,6 +14,9 @@ knitr::opts_chunk$set(
   fig.width = 8,
   fig.height = 5
 )
+
+playback_pkgs <- c("leaflet", "leaftime", "htmlwidgets")
+playback_pkgs_ok <- all(vapply(playback_pkgs, requireNamespace, logical(1), quietly = TRUE))
 ```
 
 ## Overview
@@ -87,26 +90,36 @@ The widget below is rendered directly in the tutorial, so it also appears in
 the GitHub Pages site after pkgdown build/deploy.
 
 ```{r}
-playback_map <- grz_playback_gps(
-  data = gps_clean,
-  group = "sensor_id",
-  align = TRUE,
-  align_interval_mins = 10,
-  tail_points = 30,
-  show_points = TRUE,
-  point_size_slider = TRUE,
-  point_size_min = 1,
-  point_size_max = 25,
-  playback_steps = 900,
-  playback_duration_ms = 18000,
-  popup_fields = c("sensor_id", "datetime"),
-  provider = "Esri.WorldImagery",
-  warnings = FALSE,
-  progress = FALSE,
-  show_loading_overlay = TRUE
-)
+if (playback_pkgs_ok) {
+  playback_map <- grz_playback_gps(
+    data = gps_clean,
+    group = "sensor_id",
+    align = TRUE,
+    align_interval_mins = 10,
+    tail_points = 30,
+    show_points = TRUE,
+    point_size_slider = TRUE,
+    point_size_min = 1,
+    point_size_max = 25,
+    playback_steps = 900,
+    playback_duration_ms = 18000,
+    popup_fields = c("sensor_id", "datetime"),
+    provider = "Esri.WorldImagery",
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = TRUE
+  )
 
-playback_map
+  playback_map
+} else {
+  cat(
+    "Playback widget skipped because required packages are not available: ",
+    paste(playback_pkgs, collapse = ", "),
+    ".\n",
+    sep = ""
+  )
+  NULL
+}
 ```
 
 ## 5) Practical options for larger data
@@ -136,4 +149,3 @@ Continue to GPS 103 for activity classification and label-based validation:
 - GMM + HMM state classification
 - manual labelling with `grz_label_gps_states()`
 - prediction-vs-label comparison and parameter tuning
-

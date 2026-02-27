@@ -14,6 +14,9 @@ knitr::opts_chunk$set(
   fig.width = 8,
   fig.height = 5
 )
+
+playback_pkgs <- c("leaflet", "leaftime", "htmlwidgets")
+playback_pkgs_ok <- all(vapply(playback_pkgs, requireNamespace, logical(1), quietly = TRUE))
 ```
 
 ## Overview
@@ -157,31 +160,41 @@ Before cleaning and feature derivation, it is useful to visually inspect the
 validated trajectories in a timeline map.
 
 ```{r}
-gps_valid_map <- grz_validate(
-  data = gps_raw,
-  drop_invalid = TRUE,
-  verbose = FALSE
-)
+if (playback_pkgs_ok) {
+  gps_valid_map <- grz_validate(
+    data = gps_raw,
+    drop_invalid = TRUE,
+    verbose = FALSE
+  )
 
-playback_map <- grz_playback_gps(
-  data = gps_valid_map,
-  group = "sensor_id",
-  align = TRUE,
-  align_interval_mins = 20,
-  tail_points = 20,
-  show_points = TRUE,
-  point_size_slider = TRUE,
-  point_size_min = 1,
-  point_size_max = 20,
-  playback_steps = 800,
-  playback_duration_ms = 18000,
-  popup_fields = c("sensor_id", "datetime"),
-  warnings = FALSE,
-  progress = FALSE,
-  show_loading_overlay = TRUE
-)
+  playback_map <- grz_playback_gps(
+    data = gps_valid_map,
+    group = "sensor_id",
+    align = TRUE,
+    align_interval_mins = 20,
+    tail_points = 20,
+    show_points = TRUE,
+    point_size_slider = TRUE,
+    point_size_min = 1,
+    point_size_max = 20,
+    playback_steps = 800,
+    playback_duration_ms = 18000,
+    popup_fields = c("sensor_id", "datetime"),
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = TRUE
+  )
 
-playback_map
+  playback_map
+} else {
+  cat(
+    "Playback widget skipped because required packages are not available: ",
+    paste(playback_pkgs, collapse = ", "),
+    ".\n",
+    sep = ""
+  )
+  NULL
+}
 ```
 
 How this works in practice:
