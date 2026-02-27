@@ -193,7 +193,7 @@ grz_prompt_continue <- function(stop_message) {
 #' @param block Deprecated alias for `group`.
 #' @param group Optional grouping column(s) for color/layer separation.
 #' @param state_col Optional state column for fixed state coloring (for
-#'   example `activity_state_hmm`).
+#'   example `activity_state_gmm`).
 #' @param state_colors Named colors for state levels. Defaults to red
 #'   (`inactive`) and green (`active`).
 #' @param state_legend_title Legend title used when `state_col` is provided.

@@ -43,7 +43,7 @@ grz_map(
 \item{group}{Optional grouping column(s) for color/layer separation.}
 
 \item{state_col}{Optional state column for fixed state coloring (for
-example \code{activity_state_hmm}).}
+example \code{activity_state_gmm}).}
 
 \item{state_colors}{Named colors for state levels. Defaults to red
 (\code{inactive}) and green (\code{active}).}

@@ -13,6 +13,11 @@ grz_clean(
   buffer_m = 100,
   append_paddock = TRUE,
   paddock_col = "paddock",
+  denoise_method = c("auto", "state_aware", "statistical"),
+  denoise_state_col = NULL,
+  denoise_inactive_states = c("inactive", "rest", "resting", "idle", "stationary",
+    "lying", "ruminating"),
+  denoise_keep_raw_coords = TRUE,
   groups = NULL,
   snapshot = FALSE,
   verbose = TRUE,
@@ -37,6 +42,14 @@ grz_clean(
 
 \item{paddock_col}{Output paddock column name.}
 
+\item{denoise_method}{Denoise method passed to \code{grz_denoise()}.}
+
+\item{denoise_state_col}{Optional state column for state-aware denoise.}
+
+\item{denoise_inactive_states}{Inactive state labels for state-aware denoise.}
+
+\item{denoise_keep_raw_coords}{Logical; keep \code{lon_raw} and \code{lat_raw}.}
+
 \item{groups}{Grouping columns for speed/denoise/modal paddock operations.}
 
 \item{snapshot}{Logical; print snapshots after each step.}
@@ -50,5 +63,5 @@ Cleaned data.
 }
 \description{
 Applies selected cleaning steps and returns cleaned data. By design, cleaning
-steps drop rows and print row-count changes when \code{verbose = TRUE}.
+steps report row-count changes when \code{verbose = TRUE}.
 }

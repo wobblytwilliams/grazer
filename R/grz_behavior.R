@@ -431,6 +431,242 @@ grz_hmm_fit_diag <- function(
   )
 }
 
+grz_gmm_fit_diag <- function(
+  x,
+  n_components = 2L,
+  max_iter = 200L,
+  tol = 1e-05,
+  min_var = 1e-06,
+  seed = 1
+) {
+  x <- as.matrix(x)
+  n <- nrow(x)
+  d <- ncol(x)
+  if (n < max(20L, n_components * 5L)) {
+    stop("Not enough rows for GMM fit.", call. = FALSE)
+  }
+  if (d < 1L) {
+    stop("GMM feature matrix must have at least one column.", call. = FALSE)
+  }
+
+  set.seed(seed)
+  km <- tryCatch(
+    stats::kmeans(x, centers = n_components, nstart = 5L, iter.max = 100L),
+    error = function(e) NULL
+  )
+  if (is.null(km)) {
+    cl <- sample.int(n_components, n, replace = TRUE)
+  } else {
+    cl <- as.integer(km$cluster)
+  }
+
+  means <- matrix(NA_real_, nrow = n_components, ncol = d)
+  vars <- matrix(NA_real_, nrow = n_components, ncol = d)
+  weights <- rep(1 / n_components, n_components)
+
+  for (k in seq_len(n_components)) {
+    idx <- which(cl == k)
+    if (length(idx) < 2L) {
+      idx <- sample.int(n, min(20L, n), replace = TRUE)
+    }
+    means[k, ] <- colMeans(x[idx, , drop = FALSE], na.rm = TRUE)
+    v <- apply(x[idx, , drop = FALSE], 2, stats::var, na.rm = TRUE)
+    v[!is.finite(v) | v < min_var] <- min_var
+    vars[k, ] <- v
+    weights[k] <- max(length(idx), 1) / n
+  }
+  weights <- weights / sum(weights)
+
+  ll_prev <- -Inf
+  ll_trace <- numeric(0)
+  iter_used <- 0L
+  gamma <- matrix(NA_real_, nrow = n, ncol = n_components)
+
+  for (iter in seq_len(as.integer(max_iter))) {
+    logb <- grz_hmm_log_emission_diag(x, means, vars, min_var = min_var)
+    logw <- log(pmax(weights, 1e-12))
+
+    log_joint <- sweep(logb, 2, logw, FUN = "+")
+    row_ll <- apply(log_joint, 1L, grz_logsumexp)
+    log_gamma <- log_joint - row_ll
+    gamma <- exp(log_gamma)
+    gamma <- gamma / rowSums(gamma)
+
+    nk <- colSums(gamma) + 1e-08
+    weights <- nk / sum(nk)
+
+    for (k in seq_len(n_components)) {
+      w <- gamma[, k]
+      means[k, ] <- colSums(x * w) / nk[k]
+      centered <- sweep(x, 2, means[k, ], "-")
+      v <- colSums(centered^2 * w) / nk[k]
+      v[!is.finite(v) | v < min_var] <- min_var
+      vars[k, ] <- v
+    }
+
+    ll <- sum(row_ll)
+    ll_trace <- c(ll_trace, ll)
+    iter_used <- iter
+    if (is.finite(ll_prev) && abs(ll - ll_prev) < tol) {
+      break
+    }
+    ll_prev <- ll
+  }
+
+  list(
+    weights = as.numeric(weights),
+    means = means,
+    vars = vars,
+    posterior = gamma,
+    logLik = as.numeric(tail(ll_trace, 1L)),
+    ll_trace = ll_trace,
+    iterations = iter_used
+  )
+}
+
+grz_gmm_predict_diag <- function(x, model, min_var = 1e-06) {
+  x <- as.matrix(x)
+  logb <- grz_hmm_log_emission_diag(x, model$means, model$vars, min_var = min_var)
+  logw <- log(pmax(as.numeric(model$weights), 1e-12))
+  log_joint <- sweep(logb, 2, logw, FUN = "+")
+  row_ll <- apply(log_joint, 1L, grz_logsumexp)
+  log_post <- log_joint - row_ll
+  post <- exp(log_post)
+  post <- post / rowSums(post)
+  comp <- max.col(post, ties.method = "first")
+  list(component = as.integer(comp), posterior = post, logLik = sum(row_ll))
+}
+
+grz_roll_median <- function(x, k = 5L) {
+  y <- suppressWarnings(as.numeric(x))
+  out <- y
+  ok <- which(is.finite(y))
+  if (length(ok) < 3L) {
+    return(out)
+  }
+  kk <- as.integer(max(3L, round(k)))
+  if (kk %% 2L == 0L) {
+    kk <- kk + 1L
+  }
+  if (kk > length(ok)) {
+    kk <- if (length(ok) %% 2L == 1L) length(ok) else length(ok) - 1L
+  }
+  if (kk < 3L) {
+    return(out)
+  }
+  out_vals <- stats::runmed(y[ok], k = kk, endrule = "median")
+  out[ok] <- out_vals
+  out
+}
+
+grz_hmm_adaptive_window_track <- function(lon, lat, datetime, step_m, window_mins) {
+  n <- length(lon)
+  net_disp_m <- rep(NA_real_, n)
+  path_len_m <- rep(NA_real_, n)
+  straightness <- rep(NA_real_, n)
+
+  if (n == 0L || !is.finite(window_mins) || window_mins <= 0) {
+    return(list(net_disp_m = net_disp_m, path_len_m = path_len_m, straightness = straightness))
+  }
+
+  tnum <- suppressWarnings(as.numeric(datetime))
+  step_num <- suppressWarnings(as.numeric(step_m))
+  step_num[!is.finite(step_num) | step_num < 0] <- 0
+
+  csum <- c(0, cumsum(step_num))
+  wsec <- as.numeric(window_mins) * 60
+  start_idx <- findInterval(tnum - wsec, tnum) + 1L
+  start_idx[!is.finite(tnum)] <- seq_len(n)[!is.finite(tnum)]
+
+  for (i in seq_len(n)) {
+    if (!is.finite(tnum[[i]]) || !is.finite(lon[[i]]) || !is.finite(lat[[i]])) {
+      next
+    }
+
+    s <- start_idx[[i]]
+    if (!is.finite(s) || s < 1L || s > i) {
+      s <- i
+    }
+
+    k <- s
+    while (
+      k < i &&
+      (!is.finite(tnum[[k]]) || !is.finite(lon[[k]]) || !is.finite(lat[[k]]))
+    ) {
+      k <- k + 1L
+    }
+
+    path_i <- csum[[i + 1L]] - csum[[k + 1L]]
+    if (!is.finite(path_i) || path_i < 0) {
+      path_i <- 0
+    }
+    path_len_m[[i]] <- path_i
+
+    net_i <- grz_haversine_m(lon[[k]], lat[[k]], lon[[i]], lat[[i]])
+    if (!is.finite(net_i)) {
+      next
+    }
+    net_disp_m[[i]] <- net_i
+
+    if (is.finite(path_i) && path_i > 0) {
+      straight_i <- net_i / path_i
+      straightness[[i]] <- pmin(pmax(straight_i, 0), 1)
+    } else {
+      straightness[[i]] <- 0
+    }
+  }
+
+  list(net_disp_m = net_disp_m, path_len_m = path_len_m, straightness = straightness)
+}
+
+grz_hmm_add_adaptive_features <- function(
+  dt,
+  groups,
+  step_col,
+  adaptive_window_mins = "auto",
+  adaptive_window_mult = 4,
+  adaptive_window_min_mins = 30
+) {
+  if (!is.character(adaptive_window_mins) || length(adaptive_window_mins) != 1L || adaptive_window_mins != "auto") {
+    adaptive_window_mins <- as.numeric(adaptive_window_mins)
+    if (!is.finite(adaptive_window_mins) || adaptive_window_mins <= 0) {
+      stop("`adaptive_window_mins` must be \"auto\" or a positive number.", call. = FALSE)
+    }
+  }
+  if (!is.numeric(adaptive_window_mult) || length(adaptive_window_mult) != 1L || adaptive_window_mult <= 0) {
+    stop("`adaptive_window_mult` must be a positive number.", call. = FALSE)
+  }
+  if (!is.numeric(adaptive_window_min_mins) || length(adaptive_window_min_mins) != 1L || adaptive_window_min_mins <= 0) {
+    stop("`adaptive_window_min_mins` must be a positive number.", call. = FALSE)
+  }
+
+  dt[, c(".grz_net_disp_w_m", ".grz_path_len_w_m", ".grz_straightness_w", ".grz_window_mins") := {
+    if (is.character(adaptive_window_mins)) {
+      base <- grz_round_to_base_min(as.numeric(diff(datetime), units = "mins"))
+      win <- max(adaptive_window_min_mins, adaptive_window_mult * base)
+    } else {
+      win <- as.numeric(adaptive_window_mins)
+    }
+
+    res <- grz_hmm_adaptive_window_track(
+      lon = lon,
+      lat = lat,
+      datetime = datetime,
+      step_m = suppressWarnings(as.numeric(get(step_col))),
+      window_mins = win
+    )
+
+    list(
+      res$net_disp_m,
+      res$path_len_m,
+      res$straightness,
+      rep(win, .N)
+    )
+  }, by = groups]
+
+  dt
+}
+
 #' Plot diurnal heatmaps for key movement metrics
 #'
 #' Creates cohort/group-level diurnal heatmaps to support threshold tuning
@@ -1044,6 +1280,15 @@ grz_tune_thresholds <- function(
 #' @param groups Grouping columns used for track-wise decoding.
 #' @param step_col Step-distance column (meters).
 #' @param turn_col Turn-angle column (radians).
+#' @param feature_set HMM feature set. `"adaptive"` (default) augments step and
+#'   turn with adaptive-window displacement features. `"legacy"` uses only
+#'   step and turn.
+#' @param adaptive_window_mins Adaptive feature window size in minutes. Use
+#'   `"auto"` (default) to scale window length from each track's sampling
+#'   interval.
+#' @param adaptive_window_mult Multiplier applied to base sampling interval when
+#'   `adaptive_window_mins = "auto"`.
+#' @param adaptive_window_min_mins Lower bound for auto window size (minutes).
 #' @param state_col Output state column name.
 #' @param state_id_col Output numeric state id column.
 #' @param inactive_prob_col Output posterior probability column for inactive
@@ -1058,7 +1303,8 @@ grz_tune_thresholds <- function(
 #' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
 #'
 #' @return Input data with appended HMM activity columns.
-#' @export
+#' @keywords internal
+#' @noRd
 grz_classify_activity_hmm <- function(
   data,
   groups = NULL,
@@ -1074,9 +1320,14 @@ grz_classify_activity_hmm <- function(
   min_run_n = 2L,
   seed = 1,
   verbose = TRUE,
-  return_class = c("data.frame", "data.table")
+  return_class = c("data.frame", "data.table"),
+  feature_set = c("adaptive", "legacy"),
+  adaptive_window_mins = "auto",
+  adaptive_window_mult = 4,
+  adaptive_window_min_mins = 30
 ) {
   rc <- grz_match_output_class(return_class)
+  feature_set <- match.arg(feature_set)
   if (!is.character(state_col) || length(state_col) != 1L || trimws(state_col) == "") {
     stop("`state_col` must be a single non-empty name.", call. = FALSE)
   }
@@ -1100,7 +1351,34 @@ grz_classify_activity_hmm <- function(
 
   dt[, .grz_step := suppressWarnings(as.numeric(get(step_col)))]
   dt[, .grz_turn := suppressWarnings(as.numeric(get(turn_col)))]
-  valid <- is.finite(dt$.grz_step) & dt$.grz_step >= 0 & is.finite(dt$.grz_turn) & !is.na(dt$datetime)
+  dt[, .grz_feat_step := log1p(.grz_step)]
+  dt[, .grz_feat_turn := abs(.grz_turn)]
+
+  feature_cols <- c(".grz_feat_step", ".grz_feat_turn")
+  feature_transforms <- c("log1p", "abs")
+  feature_names <- c(step_col, turn_col)
+
+  if (feature_set == "adaptive") {
+    dt <- grz_hmm_add_adaptive_features(
+      dt = dt,
+      groups = grp,
+      step_col = step_col,
+      adaptive_window_mins = adaptive_window_mins,
+      adaptive_window_mult = adaptive_window_mult,
+      adaptive_window_min_mins = adaptive_window_min_mins
+    )
+    dt[, .grz_feat_net := log1p(.grz_net_disp_w_m)]
+    dt[, .grz_feat_straight := pmin(pmax(.grz_straightness_w, 0), 1)]
+
+    feature_cols <- c(feature_cols, ".grz_feat_net", ".grz_feat_straight")
+    feature_transforms <- c(feature_transforms, "log1p", "identity")
+    feature_names <- c(feature_names, "net_displacement_window_m", "straightness_window")
+  }
+
+  valid <- !is.na(dt$datetime) & is.finite(dt$.grz_step) & dt$.grz_step >= 0 & is.finite(dt$.grz_turn)
+  for (fc in feature_cols) {
+    valid <- valid & is.finite(dt[[fc]])
+  }
 
   n_valid <- sum(valid)
   if (n_valid < 50L) {
@@ -1113,7 +1391,7 @@ grz_classify_activity_hmm <- function(
     fit_idx <- sample(fit_idx, as.integer(fit_max_rows))
   }
 
-  x_fit <- as.matrix(dt[fit_idx, .(log1p(.grz_step), abs(.grz_turn))])
+  x_fit <- as.matrix(dt[fit_idx, ..feature_cols])
   model <- grz_hmm_fit_diag(
     x = x_fit,
     n_states = 2L,
@@ -1142,7 +1420,7 @@ grz_classify_activity_hmm <- function(
       next
     }
 
-    xg <- as.matrix(dt[idx, .(log1p(.grz_step), abs(.grz_turn))])
+    xg <- as.matrix(dt[idx, ..feature_cols])
     logb <- grz_hmm_log_emission_diag(xg, model$means, model$vars, min_var = min_var)
     fb <- grz_hmm_forward_backward(logb, model$a, model$pi)
     vit <- grz_hmm_viterbi(logb, model$a, model$pi)
@@ -1166,8 +1444,9 @@ grz_classify_activity_hmm <- function(
   n_active <- if (length(n_active) == 0L) 0L else as.integer(n_active[[1L]])
 
   attr(dt, "hmm_activity_model") <- list(
-    features = c(step_col, turn_col),
-    transforms = c("log1p", "abs"),
+    feature_set = feature_set,
+    features = feature_names,
+    transforms = feature_transforms,
     state_map = data.frame(
       state_id = c(inactive_id, active_id),
       state = c("inactive", "active"),
@@ -1184,21 +1463,354 @@ grz_classify_activity_hmm <- function(
   if (isTRUE(verbose)) {
     step_centers <- pmax(expm1(model$means[, 1L]), 0)
     turn_centers <- model$means[, 2L]
-    cat(
-      sprintf(
-        "[classify_activity_hmm] valid=%s inactive=%s active=%s center_step_m(inactive)=%.2f center_step_m(active)=%.2f center_abs_turn(inactive)=%.3f center_abs_turn(active)=%.3f\n",
-        format(n_valid, big.mark = ","),
-        format(n_inactive, big.mark = ","),
-        format(n_active, big.mark = ","),
-        step_centers[inactive_id],
-        step_centers[active_id],
-        turn_centers[inactive_id],
-        turn_centers[active_id]
+    if (feature_set == "adaptive") {
+      net_centers <- pmax(expm1(model$means[, 3L]), 0)
+      straight_centers <- model$means[, 4L]
+      cat(
+        sprintf(
+          "[classify_activity_hmm] feature_set=%s valid=%s inactive=%s active=%s center_step_m(inactive)=%.2f center_step_m(active)=%.2f center_abs_turn(inactive)=%.3f center_abs_turn(active)=%.3f center_net_disp_w_m(inactive)=%.2f center_net_disp_w_m(active)=%.2f center_straight_w(inactive)=%.3f center_straight_w(active)=%.3f\n",
+          feature_set,
+          format(n_valid, big.mark = ","),
+          format(n_inactive, big.mark = ","),
+          format(n_active, big.mark = ","),
+          step_centers[inactive_id],
+          step_centers[active_id],
+          turn_centers[inactive_id],
+          turn_centers[active_id],
+          net_centers[inactive_id],
+          net_centers[active_id],
+          straight_centers[inactive_id],
+          straight_centers[active_id]
+        )
       )
-    )
+    } else {
+      cat(
+        sprintf(
+          "[classify_activity_hmm] feature_set=%s valid=%s inactive=%s active=%s center_step_m(inactive)=%.2f center_step_m(active)=%.2f center_abs_turn(inactive)=%.3f center_abs_turn(active)=%.3f\n",
+          feature_set,
+          format(n_valid, big.mark = ","),
+          format(n_inactive, big.mark = ","),
+          format(n_active, big.mark = ","),
+          step_centers[inactive_id],
+          step_centers[active_id],
+          turn_centers[inactive_id],
+          turn_centers[active_id]
+        )
+      )
+    }
   }
 
-  dt[, c(".grz_step", ".grz_turn") := NULL]
+  drop_tmp <- c(
+    ".grz_step", ".grz_turn",
+    ".grz_feat_step", ".grz_feat_turn", ".grz_feat_net", ".grz_feat_straight",
+    ".grz_net_disp_w_m", ".grz_path_len_w_m", ".grz_straightness_w", ".grz_window_mins"
+  )
+  drop_tmp <- intersect(drop_tmp, names(dt))
+  if (length(drop_tmp) > 0L) {
+    dt[, (drop_tmp) := NULL]
+  }
+  grz_as_output(dt, rc)
+}
+
+#' Classify Active/Inactive States Using GMM
+#'
+#' Fits a 2-component Gaussian Mixture Model (GMM) on transformed movement
+#' features and decodes each row into `inactive`/`active` states using posterior
+#' probabilities. Optional median smoothing can be applied to posterior
+#' inactivity probabilities to reduce label flicker.
+#'
+#' @param data Input GPS data.
+#' @param groups Grouping columns used for track-wise decoding.
+#' @param step_col Step-distance column (meters).
+#' @param turn_col Turn-angle column (radians).
+#' @param feature_set GMM feature set. `"adaptive"` (default) augments step and
+#'   turn with adaptive-window displacement features. `"legacy"` uses only
+#'   step and turn.
+#' @param adaptive_window_mins Adaptive feature window size in minutes. Use
+#'   `"auto"` (default) to scale window length from each track's sampling
+#'   interval.
+#' @param adaptive_window_mult Multiplier applied to base sampling interval when
+#'   `adaptive_window_mins = "auto"`.
+#' @param adaptive_window_min_mins Lower bound for auto window size (minutes).
+#' @param state_col Output state column name.
+#' @param component_col Output numeric component id column.
+#' @param inactive_prob_col Output posterior probability column for inactive
+#'   state.
+#' @param fit_max_rows Maximum rows used to fit the GMM (sampled if needed).
+#' @param max_iter Maximum EM iterations.
+#' @param tol EM convergence tolerance on log-likelihood.
+#' @param min_var Minimum per-component feature variance for numerical
+#'   stability.
+#' @param smoothing Posterior smoothing method: `"none"`, `"median"`, or
+#'   `"hmm"`.
+#' @param median_window_n Window size (number of rows) for median smoothing when
+#'   `smoothing = "median"`.
+#' @param hmm_self_transition Self-transition probability used when
+#'   `smoothing = "hmm"`.
+#' @param seed Random seed for reproducible fitting/subsampling.
+#' @param verbose Logical; print summary output.
+#' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
+#'
+#' @return Input data with appended GMM activity columns.
+#' @export
+grz_classify_activity_gmm <- function(
+  data,
+  groups = NULL,
+  step_col = "step_m",
+  turn_col = "turn_rad",
+  feature_set = c("adaptive", "legacy"),
+  adaptive_window_mins = "auto",
+  adaptive_window_mult = 4,
+  adaptive_window_min_mins = 30,
+  state_col = "activity_state_gmm",
+  component_col = "activity_component_gmm",
+  inactive_prob_col = "inactive_prob_gmm",
+  fit_max_rows = 200000L,
+  max_iter = 200L,
+  tol = 1e-05,
+  min_var = 1e-06,
+  smoothing = c("none", "median", "hmm"),
+  median_window_n = 5L,
+  hmm_self_transition = 0.98,
+  seed = 1,
+  verbose = TRUE,
+  return_class = c("data.frame", "data.table")
+) {
+  rc <- grz_match_output_class(return_class)
+  feature_set <- match.arg(feature_set)
+  smoothing <- match.arg(smoothing)
+
+  if (!is.character(state_col) || length(state_col) != 1L || trimws(state_col) == "") {
+    stop("`state_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.character(component_col) || length(component_col) != 1L || trimws(component_col) == "") {
+    stop("`component_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.character(inactive_prob_col) || length(inactive_prob_col) != 1L || trimws(inactive_prob_col) == "") {
+    stop("`inactive_prob_col` must be a single non-empty name.", call. = FALSE)
+  }
+  if (!is.numeric(fit_max_rows) || length(fit_max_rows) != 1L || fit_max_rows < 100) {
+    stop("`fit_max_rows` must be a number >= 100.", call. = FALSE)
+  }
+  if (!is.numeric(median_window_n) || length(median_window_n) != 1L || median_window_n < 3) {
+    stop("`median_window_n` must be >= 3.", call. = FALSE)
+  }
+  if (!is.numeric(hmm_self_transition) || length(hmm_self_transition) != 1L ||
+      !is.finite(hmm_self_transition) || hmm_self_transition <= 0 || hmm_self_transition >= 1) {
+    stop("`hmm_self_transition` must be a single number in (0, 1).", call. = FALSE)
+  }
+
+  prep <- grz_behavior_prepare_dt(data, groups = groups, ensure_features = TRUE)
+  dt <- prep$data
+  grp <- prep$groups
+  grz_require_cols(dt, c("datetime", step_col, turn_col), fun_name = "grz_classify_activity_gmm()")
+
+  dt[, .grz_step := suppressWarnings(as.numeric(get(step_col)))]
+  dt[, .grz_turn := suppressWarnings(as.numeric(get(turn_col)))]
+  dt[, .grz_feat_step := log1p(.grz_step)]
+  dt[, .grz_feat_turn := abs(.grz_turn)]
+
+  feature_cols <- c(".grz_feat_step", ".grz_feat_turn")
+  feature_names <- c(step_col, turn_col)
+  feature_transforms <- c("log1p", "abs")
+
+  if (feature_set == "adaptive") {
+    dt <- grz_hmm_add_adaptive_features(
+      dt = dt,
+      groups = grp,
+      step_col = step_col,
+      adaptive_window_mins = adaptive_window_mins,
+      adaptive_window_mult = adaptive_window_mult,
+      adaptive_window_min_mins = adaptive_window_min_mins
+    )
+    dt[, .grz_feat_net := log1p(.grz_net_disp_w_m)]
+    dt[, .grz_feat_straight := pmin(pmax(.grz_straightness_w, 0), 1)]
+
+    feature_cols <- c(feature_cols, ".grz_feat_net", ".grz_feat_straight")
+    feature_names <- c(feature_names, "net_displacement_window_m", "straightness_window")
+    feature_transforms <- c(feature_transforms, "log1p", "identity")
+  }
+
+  valid <- !is.na(dt$datetime) & is.finite(dt$.grz_step) & dt$.grz_step >= 0 & is.finite(dt$.grz_turn)
+  for (fc in feature_cols) {
+    valid <- valid & is.finite(dt[[fc]])
+  }
+  n_valid <- sum(valid)
+  if (n_valid < 50L) {
+    stop("Not enough valid rows for GMM classification.", call. = FALSE)
+  }
+
+  fit_idx <- which(valid)
+  if (length(fit_idx) > as.integer(fit_max_rows)) {
+    set.seed(seed)
+    fit_idx <- sample(fit_idx, as.integer(fit_max_rows))
+  }
+  x_fit <- as.matrix(dt[fit_idx, ..feature_cols])
+  model <- grz_gmm_fit_diag(
+    x = x_fit,
+    n_components = 2L,
+    max_iter = as.integer(max_iter),
+    tol = tol,
+    min_var = min_var,
+    seed = seed
+  )
+
+  step_centers <- pmax(expm1(model$means[, 1L]), 0)
+  if (feature_set == "adaptive") {
+    net_centers <- pmax(expm1(model$means[, 3L]), 0)
+    movement_score <- step_centers + net_centers
+  } else {
+    movement_score <- step_centers
+  }
+
+  inactive_comp <- as.integer(which.min(movement_score))
+  active_comp <- as.integer(setdiff(seq_len(nrow(model$means)), inactive_comp)[1L])
+
+  dt[, (state_col) := NA_character_]
+  dt[, (component_col) := NA_integer_]
+  dt[, (inactive_prob_col) := NA_real_]
+
+  x_all <- as.matrix(dt[which(valid), ..feature_cols])
+  pred <- grz_gmm_predict_diag(x_all, model, min_var = min_var)
+  dt[which(valid), (component_col) := as.integer(pred$component)]
+  dt[which(valid), (inactive_prob_col) := pred$posterior[, inactive_comp]]
+  dt[which(valid), (state_col) := data.table::fifelse(get(inactive_prob_col) >= 0.5, "inactive", "active")]
+  dt[get(state_col) == "inactive", (component_col) := inactive_comp]
+  dt[get(state_col) == "active", (component_col) := active_comp]
+
+  if (smoothing == "median") {
+    dt[!is.na(get(inactive_prob_col)), (inactive_prob_col) := grz_roll_median(get(inactive_prob_col), k = as.integer(median_window_n)), by = grp]
+    dt[!is.na(get(inactive_prob_col)), (state_col) := data.table::fifelse(get(inactive_prob_col) >= 0.5, "inactive", "active")]
+    dt[get(state_col) == "inactive", (component_col) := inactive_comp]
+    dt[get(state_col) == "active", (component_col) := active_comp]
+  } else if (smoothing == "hmm") {
+    eps <- 1e-09
+    stay <- as.numeric(hmm_self_transition)
+    trans <- 1 - stay
+    a <- matrix(
+      c(stay, trans, trans, stay),
+      nrow = 2L,
+      byrow = TRUE
+    )
+
+    dt[, c(".grz_hmm_state", ".grz_hmm_prob") := {
+      p <- suppressWarnings(as.numeric(get(inactive_prob_col)))
+      n_local <- length(p)
+      out_state <- rep(NA_character_, n_local)
+      out_prob <- rep(NA_real_, n_local)
+
+      valid <- which(is.finite(p))
+      if (length(valid) > 0L) {
+        run_id <- cumsum(c(1L, diff(valid) != 1L))
+        split_runs <- split(valid, run_id)
+
+        for (idx in split_runs) {
+          if (length(idx) == 0L) {
+            next
+          }
+
+          p_run <- p[idx]
+          p_run <- pmin(pmax(p_run, eps), 1 - eps)
+          logb <- cbind(log(p_run), log(1 - p_run))
+
+          pi_vec <- c(p_run[[1L]], 1 - p_run[[1L]])
+          pi_vec <- pmax(pi_vec, eps)
+          pi_vec <- pi_vec / sum(pi_vec)
+
+          fb <- grz_hmm_forward_backward(logb, a, pi_vec)
+          vit <- grz_hmm_viterbi(logb, a, pi_vec)
+
+          out_prob[idx] <- fb$gamma[, 1L]
+          out_state[idx] <- data.table::fifelse(vit$path == 1L, "inactive", "active")
+        }
+      }
+
+      list(out_state, out_prob)
+    }, by = grp]
+
+    dt[!is.na(.grz_hmm_prob), (inactive_prob_col) := .grz_hmm_prob]
+    dt[!is.na(.grz_hmm_state), (state_col) := .grz_hmm_state]
+    dt[get(state_col) == "inactive", (component_col) := inactive_comp]
+    dt[get(state_col) == "active", (component_col) := active_comp]
+    dt[, c(".grz_hmm_state", ".grz_hmm_prob") := NULL]
+  }
+
+  attr(dt, "gmm_activity_model") <- list(
+    feature_set = feature_set,
+    features = feature_names,
+    transforms = feature_transforms,
+    component_map = data.frame(
+      component = c(inactive_comp, active_comp),
+      state = c("inactive", "active"),
+      stringsAsFactors = FALSE
+    ),
+    weights = model$weights,
+    means = model$means,
+    vars = model$vars,
+    logLik = model$logLik,
+    iterations = model$iterations,
+    smoothing = smoothing,
+    median_window_n = as.integer(median_window_n),
+    hmm_self_transition = as.numeric(hmm_self_transition)
+  )
+
+  if (isTRUE(verbose)) {
+    counts <- dt[, .N, by = state_col][order(-N)]
+    n_inactive <- counts[get(state_col) == "inactive", N]
+    n_active <- counts[get(state_col) == "active", N]
+    n_inactive <- if (length(n_inactive) == 0L) 0L else as.integer(n_inactive[[1L]])
+    n_active <- if (length(n_active) == 0L) 0L else as.integer(n_active[[1L]])
+    turn_centers <- model$means[, 2L]
+
+    if (feature_set == "adaptive") {
+      net_centers <- pmax(expm1(model$means[, 3L]), 0)
+      straight_centers <- model$means[, 4L]
+      cat(
+        sprintf(
+          "[classify_activity_gmm] feature_set=%s smoothing=%s valid=%s inactive=%s active=%s center_step_m(inactive)=%.2f center_step_m(active)=%.2f center_abs_turn(inactive)=%.3f center_abs_turn(active)=%.3f center_net_disp_w_m(inactive)=%.2f center_net_disp_w_m(active)=%.2f center_straight_w(inactive)=%.3f center_straight_w(active)=%.3f\n",
+          feature_set,
+          smoothing,
+          format(n_valid, big.mark = ","),
+          format(n_inactive, big.mark = ","),
+          format(n_active, big.mark = ","),
+          step_centers[inactive_comp],
+          step_centers[active_comp],
+          turn_centers[inactive_comp],
+          turn_centers[active_comp],
+          net_centers[inactive_comp],
+          net_centers[active_comp],
+          straight_centers[inactive_comp],
+          straight_centers[active_comp]
+        )
+      )
+    } else {
+      cat(
+        sprintf(
+          "[classify_activity_gmm] feature_set=%s smoothing=%s valid=%s inactive=%s active=%s center_step_m(inactive)=%.2f center_step_m(active)=%.2f center_abs_turn(inactive)=%.3f center_abs_turn(active)=%.3f\n",
+          feature_set,
+          smoothing,
+          format(n_valid, big.mark = ","),
+          format(n_inactive, big.mark = ","),
+          format(n_active, big.mark = ","),
+          step_centers[inactive_comp],
+          step_centers[active_comp],
+          turn_centers[inactive_comp],
+          turn_centers[active_comp]
+        )
+      )
+    }
+  }
+
+  drop_tmp <- c(
+    ".grz_step", ".grz_turn",
+    ".grz_feat_step", ".grz_feat_turn", ".grz_feat_net", ".grz_feat_straight",
+    ".grz_net_disp_w_m", ".grz_path_len_w_m", ".grz_straightness_w", ".grz_window_mins"
+  )
+  drop_tmp <- intersect(drop_tmp, names(dt))
+  if (length(drop_tmp) > 0L) {
+    dt[, (drop_tmp) := NULL]
+  }
+
   grz_as_output(dt, rc)
 }
 
@@ -1292,7 +1904,8 @@ grz_spatial_staypoint_track <- function(
 #' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
 #'
 #' @return Input data with appended spatial activity columns.
-#' @export
+#' @keywords internal
+#' @noRd
 grz_classify_activity_spatial <- function(
   data,
   groups = NULL,
@@ -1402,6 +2015,14 @@ grz_classify_activity_spatial <- function(
 #' @param spatial_cluster_col Output spatial cluster id column name.
 #' @param spatial_dwell_col Output spatial dwell duration column name.
 #' @param hmm_fit_max_rows Maximum rows for HMM fitting.
+#' @param hmm_feature_set HMM feature set passed to
+#'   `grz_classify_activity_hmm()`.
+#' @param hmm_adaptive_window_mins Adaptive feature window passed to
+#'   `grz_classify_activity_hmm()`.
+#' @param hmm_adaptive_window_mult Adaptive window multiplier passed to
+#'   `grz_classify_activity_hmm()`.
+#' @param hmm_adaptive_window_min_mins Adaptive window lower bound (minutes)
+#'   passed to `grz_classify_activity_hmm()`.
 #' @param spatial_radius_m Radius for spatial clustering (meters).
 #' @param spatial_min_dwell_mins Minimum dwell time for spatial inactivity.
 #' @param spatial_min_points Minimum points for spatial inactivity cluster.
@@ -1412,7 +2033,8 @@ grz_classify_activity_spatial <- function(
 #' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
 #'
 #' @return Input data with appended HMM, spatial, and final consensus columns.
-#' @export
+#' @keywords internal
+#' @noRd
 grz_classify_activity_consensus <- function(
   data,
   groups = NULL,
@@ -1428,6 +2050,10 @@ grz_classify_activity_consensus <- function(
   spatial_cluster_col = "activity_cluster_spatial",
   spatial_dwell_col = "activity_dwell_mins_spatial",
   hmm_fit_max_rows = 200000L,
+  hmm_feature_set = c("adaptive", "legacy"),
+  hmm_adaptive_window_mins = "auto",
+  hmm_adaptive_window_mult = 4,
+  hmm_adaptive_window_min_mins = 30,
   spatial_radius_m = 20,
   spatial_min_dwell_mins = 20,
   spatial_min_points = 3L,
@@ -1439,6 +2065,7 @@ grz_classify_activity_consensus <- function(
 ) {
   rc <- grz_match_output_class(return_class)
   decision_rule <- match.arg(decision_rule)
+  hmm_feature_set <- match.arg(hmm_feature_set)
 
   if (!is.numeric(hmm_weight) || length(hmm_weight) != 1L || hmm_weight < 0) {
     stop("`hmm_weight` must be a non-negative number.", call. = FALSE)
@@ -1460,6 +2087,10 @@ grz_classify_activity_consensus <- function(
       state_col = hmm_state_col,
       inactive_prob_col = hmm_prob_col,
       fit_max_rows = hmm_fit_max_rows,
+      feature_set = hmm_feature_set,
+      adaptive_window_mins = hmm_adaptive_window_mins,
+      adaptive_window_mult = hmm_adaptive_window_mult,
+      adaptive_window_min_mins = hmm_adaptive_window_min_mins,
       min_run_n = min_run_n,
       seed = seed,
       verbose = FALSE,

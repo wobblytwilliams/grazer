@@ -483,101 +483,221 @@ grz_clean_spatial <- function(
   grz_as_output(out, rc)
 }
 
-grz_denoise_keep_mask <- function(dt, radius_m, max_gap_s, group_cols) {
-  data.table::setorderv(dt, c(group_cols, "datetime"))
-  dt[, .grz_row_id := .I]
-  split_idx <- split(seq_len(nrow(dt)), interaction(dt[, ..group_cols], drop = TRUE, lex.order = TRUE))
-  keep_ids <- integer(0)
-
-  for (idx in split_idx) {
-    sub <- dt[idx, ]
-    n <- nrow(sub)
-    if (n == 0L) {
-      next
-    }
-    keep_local <- rep(FALSE, n)
-    keep_local[1] <- TRUE
-    last_keep <- 1L
-
-    if (n >= 2L) {
-      for (i in 2:n) {
-        d <- grz_haversine_m(
-          lon1 = sub$lon[last_keep],
-          lat1 = sub$lat[last_keep],
-          lon2 = sub$lon[i],
-          lat2 = sub$lat[i]
-        )
-        dt_s <- as.numeric(sub$datetime[i] - sub$datetime[last_keep], units = "secs")
-        if (!is.finite(d) || !is.finite(dt_s) || d > radius_m || dt_s > max_gap_s) {
-          keep_local[i] <- TRUE
-          last_keep <- i
-        }
-      }
-    }
-
-    keep_ids <- c(keep_ids, sub$.grz_row_id[keep_local])
-  }
-  dt$.grz_row_id %in% keep_ids
+grz_denoise_normalize_state <- function(x) {
+  out <- trimws(tolower(as.character(x)))
+  out[out %in% c("", "na", "n/a", "null")] <- NA_character_
+  out
 }
 
-#' Denoise static GPS jitter
+grz_denoise_smooth_series <- function(y) {
+  y_num <- suppressWarnings(as.numeric(y))
+  out <- y_num
+  idx <- which(is.finite(y_num))
+  if (length(idx) < 4L) {
+    return(out)
+  }
+
+  x <- seq_along(y_num)
+  fit <- tryCatch(
+    stats::smooth.spline(x = x[idx], y = y_num[idx], cv = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(fit)) {
+    return(out)
+  }
+
+  pred <- tryCatch(
+    stats::predict(fit, x = x[idx])$y,
+    error = function(e) NULL
+  )
+  if (is.null(pred) || length(pred) != length(idx)) {
+    return(out)
+  }
+
+  out[idx] <- as.numeric(pred)
+  out
+}
+
+grz_denoise_pick_state_col <- function(dt, state_col = NULL) {
+  if (!is.null(state_col)) {
+    if (!is.character(state_col) || length(state_col) != 1L || trimws(state_col) == "") {
+      stop("`state_col` must be NULL or a single column name.", call. = FALSE)
+    }
+    if (!state_col %in% names(dt)) {
+      stop("`state_col` not found in `data`: ", state_col, call. = FALSE)
+    }
+    return(state_col)
+  }
+
+  candidates <- c(
+    "activity_state_gmm",
+    "activity_state",
+    "behavior_state",
+    "label"
+  )
+  hit <- candidates[candidates %in% names(dt)]
+  if (length(hit) == 0L) {
+    return(NULL)
+  }
+  hit[[1]]
+}
+
+#' Denoise GPS jitter using statistical or state-aware smoothing
 #'
-#' Drops near-duplicate static fixes by retaining the first point and then
-#' retaining additional points only when movement exceeds `radius_m` or elapsed
-#' time exceeds `max_gap_mins`.
+#' Uses statistical smoothing to reduce coordinate noise without dropping rows.
+#' If active/inactive state labels are available, a state-aware method can be
+#' used where inactive runs are collapsed to a robust centroid and active runs
+#' are smoothed statistically.
 #'
 #' @param data Data frame of GPS rows.
-#' @param radius_m Spatial jitter tolerance in meters.
-#' @param max_gap_mins Maximum retained gap while static.
+#' @param method Denoise method: `"auto"`, `"state_aware"`, or `"statistical"`.
+#'   `"auto"` uses state-aware denoising when a usable state column is present;
+#'   otherwise statistical smoothing is used.
+#' @param state_col Optional state column used for `"state_aware"` mode.
+#' @param inactive_states Character values treated as inactive in state-aware
+#'   mode.
 #' @param groups Grouping columns for denoise run.
-#' @param verbose Logical; print drop counts.
+#' @param keep_raw_coords Logical; when `TRUE`, adds `lon_raw` and `lat_raw`
+#'   columns before replacing `lon` and `lat`.
+#' @param verbose Logical; print processing details.
 #' @param snapshot Logical; print quick snapshot after step.
 #' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
 #'
-#' @return Denoised data.
+#' @return Denoised data (row count unchanged).
 #' @export
 grz_denoise <- function(
   data,
-  radius_m = 8,
-  max_gap_mins = 20,
+  method = c("auto", "state_aware", "statistical"),
+  state_col = NULL,
+  inactive_states = c("inactive", "rest", "resting", "idle", "stationary", "lying", "ruminating"),
   groups = NULL,
+  keep_raw_coords = TRUE,
   verbose = TRUE,
   snapshot = FALSE,
   return_class = c("data.frame", "data.table")
 ) {
-  if (!is.numeric(radius_m) || length(radius_m) != 1L || radius_m <= 0) {
-    stop("`radius_m` must be a positive number.", call. = FALSE)
+  method <- match.arg(method)
+  if (!is.character(inactive_states) || length(inactive_states) < 1L) {
+    stop("`inactive_states` must be a non-empty character vector.", call. = FALSE)
   }
-  if (!is.numeric(max_gap_mins) || length(max_gap_mins) != 1L || max_gap_mins <= 0) {
-    stop("`max_gap_mins` must be a positive number.", call. = FALSE)
+  if (!is.logical(keep_raw_coords) || length(keep_raw_coords) != 1L || is.na(keep_raw_coords)) {
+    stop("`keep_raw_coords` must be TRUE or FALSE.", call. = FALSE)
   }
 
   rc <- grz_match_output_class(return_class)
   dt <- grz_prepare_clean_dt(data, require_core = TRUE)
   grp <- grz_default_group_cols(dt, groups = groups)
   before_n <- nrow(dt)
+  data.table::setorderv(dt, c(grp, "datetime"))
 
-  keep <- grz_denoise_keep_mask(
-    dt = dt,
-    radius_m = radius_m,
-    max_gap_s = max_gap_mins * 60,
-    group_cols = grp
-  )
-  out <- dt[keep, ]
-  out[, .grz_row_id := NULL]
+  if (isTRUE(keep_raw_coords)) {
+    if (!"lon_raw" %in% names(dt)) {
+      dt[, lon_raw := lon]
+    }
+    if (!"lat_raw" %in% names(dt)) {
+      dt[, lat_raw := lat]
+    }
+  }
+
+  state_col_used <- grz_denoise_pick_state_col(dt, state_col = state_col)
+  inactive_lookup <- unique(grz_denoise_normalize_state(inactive_states))
+
+  mode_used <- method
+  if (mode_used == "auto") {
+    if (is.null(state_col_used)) {
+      mode_used <- "statistical"
+    } else {
+      st <- grz_denoise_normalize_state(dt[[state_col_used]])
+      mode_used <- ifelse(any(st %in% inactive_lookup, na.rm = TRUE), "state_aware", "statistical")
+    }
+  }
+
+  if (mode_used == "state_aware" && is.null(state_col_used)) {
+    warning("`method = \"state_aware\"` requested but no state column found; using statistical denoise.", call. = FALSE)
+    mode_used <- "statistical"
+  }
+
+  split_idx <- split(seq_len(nrow(dt)), interaction(dt[, ..grp], drop = TRUE, lex.order = TRUE))
+  lon_out <- dt$lon
+  lat_out <- dt$lat
+  n_inactive_runs <- 0L
+
+  for (idx in split_idx) {
+    sub <- dt[idx, ]
+    if (nrow(sub) == 0L) {
+      next
+    }
+
+    if (mode_used == "statistical") {
+      lon_out[idx] <- grz_denoise_smooth_series(sub$lon)
+      lat_out[idx] <- grz_denoise_smooth_series(sub$lat)
+      next
+    }
+
+    state_norm <- grz_denoise_normalize_state(sub[[state_col_used]])
+    is_inactive <- state_norm %in% inactive_lookup
+    if (!any(is_inactive, na.rm = TRUE)) {
+      lon_out[idx] <- grz_denoise_smooth_series(sub$lon)
+      lat_out[idx] <- grz_denoise_smooth_series(sub$lat)
+      next
+    }
+
+    run_id <- cumsum(c(TRUE, is_inactive[-1] != is_inactive[-length(is_inactive)]))
+    sub_lon <- sub$lon
+    sub_lat <- sub$lat
+    run_vals <- unique(run_id)
+
+    for (r in run_vals) {
+      ridx <- which(run_id == r)
+      if (length(ridx) == 0L) {
+        next
+      }
+
+      if (isTRUE(is_inactive[ridx[[1]]])) {
+        lon_center <- suppressWarnings(stats::median(sub_lon[ridx], na.rm = TRUE))
+        lat_center <- suppressWarnings(stats::median(sub_lat[ridx], na.rm = TRUE))
+        if (is.finite(lon_center) && is.finite(lat_center)) {
+          sub_lon[ridx] <- lon_center
+          sub_lat[ridx] <- lat_center
+          n_inactive_runs <- n_inactive_runs + 1L
+        }
+      } else {
+        sub_lon[ridx] <- grz_denoise_smooth_series(sub_lon[ridx])
+        sub_lat[ridx] <- grz_denoise_smooth_series(sub_lat[ridx])
+      }
+    }
+
+    lon_out[idx] <- sub_lon
+    lat_out[idx] <- sub_lat
+  }
+
+  dt[, lon := lon_out]
+  dt[, lat := lat_out]
 
   if (isTRUE(verbose)) {
-    cat(sprintf("[denoise] radius_m=%.1f max_gap_mins=%.1f\n", radius_m, max_gap_mins))
+    if (mode_used == "state_aware") {
+      cat(
+        sprintf(
+          "[denoise] method=%s state_col=%s inactive_runs_collapsed=%s\n",
+          mode_used,
+          state_col_used,
+          format(n_inactive_runs, big.mark = ",")
+        )
+      )
+    } else {
+      cat(sprintf("[denoise] method=%s\n", mode_used))
+    }
   }
-  grz_print_clean_step("denoise", before_n, nrow(out), verbose = verbose)
-  grz_print_snapshot(out, step = "denoise", snapshot = snapshot, verbose = verbose)
-  grz_as_output(out, rc)
+
+  grz_print_clean_step("denoise", before_n, nrow(dt), verbose = verbose)
+  grz_print_snapshot(dt, step = "denoise", snapshot = snapshot, verbose = verbose)
+  grz_as_output(dt, rc)
 }
 
 #' Cleaning pipeline wrapper
 #'
-#' Applies selected cleaning steps and returns cleaned data. By design, cleaning
-#' steps drop rows and print row-count changes when `verbose = TRUE`.
+#' Applies selected cleaning steps and returns cleaned data. Cleaning steps
+#' report row-count changes when `verbose = TRUE`.
 #'
 #' @param data Data frame of GPS rows.
 #' @param steps Steps to apply. Any of: `"duplicates"`, `"errors"`,
@@ -588,6 +708,10 @@ grz_denoise <- function(
 #' @param buffer_m Paddock buffer in meters.
 #' @param append_paddock Logical; append paddock name column.
 #' @param paddock_col Output paddock column name.
+#' @param denoise_method Denoise method passed to `grz_denoise()`.
+#' @param denoise_state_col Optional state column for state-aware denoise.
+#' @param denoise_inactive_states Inactive state labels for state-aware denoise.
+#' @param denoise_keep_raw_coords Logical; keep `lon_raw` and `lat_raw`.
 #' @param groups Grouping columns for speed/denoise/modal paddock operations.
 #' @param snapshot Logical; print snapshots after each step.
 #' @param verbose Logical; print details.
@@ -604,6 +728,10 @@ grz_clean <- function(
   buffer_m = 100,
   append_paddock = TRUE,
   paddock_col = "paddock",
+  denoise_method = c("auto", "state_aware", "statistical"),
+  denoise_state_col = NULL,
+  denoise_inactive_states = c("inactive", "rest", "resting", "idle", "stationary", "lying", "ruminating"),
+  denoise_keep_raw_coords = TRUE,
   groups = NULL,
   snapshot = FALSE,
   verbose = TRUE,
@@ -611,6 +739,7 @@ grz_clean <- function(
 ) {
   rc <- grz_match_output_class(return_class)
   speed_stat_method <- match.arg(speed_stat_method)
+  denoise_method <- match.arg(denoise_method)
 
   allowed_steps <- c("duplicates", "errors", "speed_fixed", "speed_stat", "spatial", "denoise")
   if (!is.character(steps) || length(steps) < 1L) {
@@ -683,7 +812,11 @@ grz_clean <- function(
     } else if (st == "denoise") {
       out <- grz_denoise(
         out,
+        method = denoise_method,
+        state_col = denoise_state_col,
+        inactive_states = denoise_inactive_states,
         groups = groups,
+        keep_raw_coords = denoise_keep_raw_coords,
         verbose = verbose,
         snapshot = snapshot,
         return_class = "data.table"

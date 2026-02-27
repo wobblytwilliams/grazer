@@ -80,6 +80,12 @@ gps_clean <- grz_clean(
 # 3) Row-level metrics
 gps_move <- grz_calculate_movement(gps_clean)
 gps_social <- grz_calculate_social(gps_clean)
+gps_states <- grz_classify_activity_gmm(
+  gps_clean,
+  groups = "sensor_id",
+  smoothing = "hmm",
+  hmm_self_transition = 0.98
+)
 
 # 4) Epoch summaries
 daily_metrics <- grz_calculate_epoch_metrics(gps_clean, epoch = "day")
@@ -89,9 +95,7 @@ head(daily_metrics)
 
 ## Main Function Groups
 
-## Main Function Groups
-
-`grazer` functions follow a typical telemetry workflow: validate inputs → clean tracks → derive metrics → summarise patterns → interpret behaviour.
+`grazer` functions follow a typical telemetry workflow: validate inputs -> clean tracks -> derive metrics -> summarise patterns -> interpret behaviour.
 
 ### Ingest & validation
 
@@ -115,7 +119,7 @@ Cleaning functions remove or flag records that may bias movement and behaviour m
 | `grz_clean_speed_stat()` | Identifies speed outliers using data-driven thresholds. |
 | `grz_append_paddock_names()` | Assigns paddock or area identifiers via spatial overlay. |
 | `grz_clean_spatial()` | Removes fixes outside expected spatial boundaries. |
-| `grz_denoise()` | Reduces GPS jitter and small-scale location noise. |
+| `grz_denoise()` | Reduces GPS jitter using statistical smoothing, with optional state-aware denoise when active/inactive labels are available. |
 | `grz_clean()` | Runs selected cleaning steps as a reproducible pipeline. |
 
 ---
@@ -147,9 +151,7 @@ Cleaning functions remove or flag records that may bias movement and behaviour m
 | `grz_plot_diurnal_metrics()` | Visualises diurnal patterns in movement and social metrics. |
 | `grz_behavior_threshold_guide()` | Suggests candidate thresholds for activity classification. |
 | `grz_tune_thresholds()` | Tunes thresholds using labelled data or heuristics. |
-| `grz_classify_activity_hmm()` | Classifies activity using a hidden Markov model. |
-| `grz_classify_activity_spatial()` | Classifies activity using spatial or rule-based features. |
-| `grz_classify_activity_consensus()` | Combines outputs from multiple classification methods. |
+| `grz_classify_activity_gmm()` | Classifies activity using a 2-component Gaussian mixture model with optional HMM smoothing. |
 | `grz_classify_behavior()` | Produces final behavioural state labels. |
 | `grz_plot_diurnal_states()` | Visualises behavioural states across time-of-day. |
 | `grz_validate_behavior()` | Performs QA checks on behavioural outputs. |
@@ -158,7 +160,7 @@ Cleaning functions remove or flag records that may bias movement and behaviour m
 ## Interactive Tools
 
 - `grz_map()` for interactive GPS mapping.
-- `grz_label_gps_states()` for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app. For use in the activity state (HMM and KDE determination) pipeline.
+- `grz_label_gps_states()` for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app. For use in the GMM activity-state workflow.
 
 ## Output Conventions
 
@@ -169,3 +171,5 @@ Cleaning functions remove or flag records that may bias movement and behaviour m
 ## License
 
 MIT License.
+
+

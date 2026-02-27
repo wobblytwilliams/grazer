@@ -2,13 +2,16 @@
 % Please edit documentation in R/grz_clean_pipeline.R
 \name{grz_denoise}
 \alias{grz_denoise}
-\title{Denoise static GPS jitter}
+\title{Denoise GPS jitter using statistical or state-aware smoothing}
 \usage{
 grz_denoise(
   data,
-  radius_m = 8,
-  max_gap_mins = 20,
+  method = c("auto", "state_aware", "statistical"),
+  state_col = NULL,
+  inactive_states = c("inactive", "rest", "resting", "idle", "stationary", "lying",
+    "ruminating"),
   groups = NULL,
+  keep_raw_coords = TRUE,
   verbose = TRUE,
   snapshot = FALSE,
   return_class = c("data.frame", "data.table")
@@ -17,23 +20,32 @@ grz_denoise(
 \arguments{
 \item{data}{Data frame of GPS rows.}
 
-\item{radius_m}{Spatial jitter tolerance in meters.}
+\item{method}{Denoise method: \code{"auto"}, \code{"state_aware"}, or \code{"statistical"}.
+\code{"auto"} uses state-aware denoising when a usable state column is present;
+otherwise statistical smoothing is used.}
 
-\item{max_gap_mins}{Maximum retained gap while static.}
+\item{state_col}{Optional state column used for \code{"state_aware"} mode.}
+
+\item{inactive_states}{Character values treated as inactive in state-aware
+mode.}
 
 \item{groups}{Grouping columns for denoise run.}
 
-\item{verbose}{Logical; print drop counts.}
+\item{keep_raw_coords}{Logical; when \code{TRUE}, adds \code{lon_raw} and \code{lat_raw}
+columns before replacing \code{lon} and \code{lat}.}
+
+\item{verbose}{Logical; print processing details.}
 
 \item{snapshot}{Logical; print quick snapshot after step.}
 
 \item{return_class}{Output class: \code{"data.frame"} (default) or \code{"data.table"}.}
 }
 \value{
-Denoised data.
+Denoised data (row count unchanged).
 }
 \description{
-Drops near-duplicate static fixes by retaining the first point and then
-retaining additional points only when movement exceeds \code{radius_m} or elapsed
-time exceeds \code{max_gap_mins}.
+Uses statistical smoothing to reduce coordinate noise without dropping rows.
+If active/inactive state labels are available, a state-aware method can be
+used where inactive runs are collapsed to a robust centroid and active runs
+are smoothed statistically.
 }
