@@ -70,14 +70,28 @@ gps <- dplyr::rename(
 
 gps <- grz_validate(gps, drop_invalid = TRUE)
 
-# 2) Clean
+# 2) Quick playback inspection (after validate)
+m_preview <- grz_playback_gps(
+  data = gps,
+  group = "sensor_id",
+  align = TRUE,
+  align_interval_mins = "base",
+  tail_points = 20,
+  show_points = TRUE,
+  point_size_slider = TRUE,
+  warnings = FALSE,
+  progress = FALSE
+)
+print(m_preview)
+
+# 3) Clean
 gps_clean <- grz_clean(
   gps,
   steps = c("duplicates", "errors", "speed_fixed", "denoise"),
   max_speed_mps = 4
 )
 
-# 3) Row-level metrics
+# 4) Row-level metrics
 gps_move <- grz_calculate_movement(gps_clean)
 gps_social <- grz_calculate_social(gps_clean)
 gps_states <- grz_classify_activity_gmm(
@@ -87,7 +101,7 @@ gps_states <- grz_classify_activity_gmm(
   hmm_self_transition = 0.98
 )
 
-# 4) Epoch summaries
+# 5) Epoch summaries
 daily_metrics <- grz_calculate_epoch_metrics(gps_clean, epoch = "day")
 
 head(daily_metrics)
@@ -159,7 +173,8 @@ Cleaning functions remove or flag records that may bias movement and behaviour m
 
 ## Interactive Tools
 
-- `grz_map()` for interactive GPS mapping.
+- `grz_map()` for interactive static GPS mapping (low overheads).
+- `grz_playback_gps()` for timeline playback with animated track tails on a leaflet map (high overheads).
 - `grz_label_gps_states()` for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app. For use in the GMM activity-state workflow.
 
 ## Output Conventions
