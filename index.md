@@ -105,6 +105,12 @@ gps_clean <- grz_clean(
 # 3) Row-level metrics
 gps_move <- grz_calculate_movement(gps_clean)
 gps_social <- grz_calculate_social(gps_clean)
+gps_states <- grz_classify_activity_gmm(
+  gps_clean,
+  groups = "sensor_id",
+  smoothing = "hmm",
+  hmm_self_transition = 0.98
+)
 
 # 4) Epoch summaries
 daily_metrics <- grz_calculate_epoch_metrics(gps_clean, epoch = "day")
@@ -114,10 +120,8 @@ head(daily_metrics)
 
 ## Main Function Groups
 
-## Main Function Groups
-
 `grazer` functions follow a typical telemetry workflow: validate inputs
-→ clean tracks → derive metrics → summarise patterns → interpret
+-\> clean tracks -\> derive metrics -\> summarise patterns -\> interpret
 behaviour.
 
 ### Ingest & validation
@@ -134,16 +138,16 @@ behaviour.
 Cleaning functions remove or flag records that may bias movement and
 behaviour metrics.
 
-| Function                                                                                                       | Purpose                                                               |
-|----------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
-| [`grz_clean_duplicates()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_duplicates.md)         | Removes duplicate fixes.                                              |
-| [`grz_clean_errors()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_errors.md)                 | Removes missing or impossible values (coordinates, timestamps).       |
-| [`grz_clean_speed_fixed()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_fixed.md)       | Removes biologically implausible steps using a fixed speed threshold. |
-| [`grz_clean_speed_stat()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_stat.md)         | Identifies speed outliers using data-driven thresholds.               |
-| [`grz_append_paddock_names()`](https://wobblytwilliams.github.io/grazer/reference/grz_append_paddock_names.md) | Assigns paddock or area identifiers via spatial overlay.              |
-| [`grz_clean_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_spatial.md)               | Removes fixes outside expected spatial boundaries.                    |
-| [`grz_denoise()`](https://wobblytwilliams.github.io/grazer/reference/grz_denoise.md)                           | Reduces GPS jitter and small-scale location noise.                    |
-| [`grz_clean()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean.md)                               | Runs selected cleaning steps as a reproducible pipeline.              |
+| Function                                                                                                       | Purpose                                                                                                                      |
+|----------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| [`grz_clean_duplicates()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_duplicates.md)         | Removes duplicate fixes.                                                                                                     |
+| [`grz_clean_errors()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_errors.md)                 | Removes missing or impossible values (coordinates, timestamps).                                                              |
+| [`grz_clean_speed_fixed()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_fixed.md)       | Removes biologically implausible steps using a fixed speed threshold.                                                        |
+| [`grz_clean_speed_stat()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_stat.md)         | Identifies speed outliers using data-driven thresholds.                                                                      |
+| [`grz_append_paddock_names()`](https://wobblytwilliams.github.io/grazer/reference/grz_append_paddock_names.md) | Assigns paddock or area identifiers via spatial overlay.                                                                     |
+| [`grz_clean_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_spatial.md)               | Removes fixes outside expected spatial boundaries.                                                                           |
+| [`grz_denoise()`](https://wobblytwilliams.github.io/grazer/reference/grz_denoise.md)                           | Reduces GPS jitter using statistical smoothing, with optional state-aware denoise when active/inactive labels are available. |
+| [`grz_clean()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean.md)                               | Runs selected cleaning steps as a reproducible pipeline.                                                                     |
 
 ------------------------------------------------------------------------
 
@@ -169,18 +173,16 @@ behaviour metrics.
 
 ### Behaviour tools
 
-| Function                                                                                                                     | Purpose                                                     |
-|------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|
-| [`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)               | Visualises diurnal patterns in movement and social metrics. |
-| [`grz_behavior_threshold_guide()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_threshold_guide.md)       | Suggests candidate thresholds for activity classification.  |
-| [`grz_tune_thresholds()`](https://wobblytwilliams.github.io/grazer/reference/grz_tune_thresholds.md)                         | Tunes thresholds using labelled data or heuristics.         |
-| [`grz_classify_activity_hmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_hmm.md)             | Classifies activity using a hidden Markov model.            |
-| [`grz_classify_activity_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_spatial.md)     | Classifies activity using spatial or rule-based features.   |
-| [`grz_classify_activity_consensus()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.md) | Combines outputs from multiple classification methods.      |
-| [`grz_classify_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_behavior.md)                     | Produces final behavioural state labels.                    |
-| [`grz_plot_diurnal_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_states.md)                 | Visualises behavioural states across time-of-day.           |
-| [`grz_validate_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_behavior.md)                     | Performs QA checks on behavioural outputs.                  |
-| [`grz_behavior_pipeline()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_pipeline.md)                     | Runs an end-to-end behaviour classification workflow.       |
+| Function                                                                                                               | Purpose                                                                                     |
+|------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| [`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)         | Visualises diurnal patterns in movement and social metrics.                                 |
+| [`grz_behavior_threshold_guide()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_threshold_guide.md) | Suggests candidate thresholds for activity classification.                                  |
+| [`grz_tune_thresholds()`](https://wobblytwilliams.github.io/grazer/reference/grz_tune_thresholds.md)                   | Tunes thresholds using labelled data or heuristics.                                         |
+| [`grz_classify_activity_gmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_gmm.md)       | Classifies activity using a 2-component Gaussian mixture model with optional HMM smoothing. |
+| [`grz_classify_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_behavior.md)               | Produces final behavioural state labels.                                                    |
+| [`grz_plot_diurnal_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_states.md)           | Visualises behavioural states across time-of-day.                                           |
+| [`grz_validate_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_behavior.md)               | Performs QA checks on behavioural outputs.                                                  |
+| [`grz_behavior_pipeline()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_pipeline.md)               | Runs an end-to-end behaviour classification workflow.                                       |
 
 ## Interactive Tools
 
@@ -188,7 +190,7 @@ behaviour metrics.
   for interactive GPS mapping.
 - [`grz_label_gps_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_label_gps_states.md)
   for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app. For
-  use in the activity state (HMM and KDE determination) pipeline.
+  use in the GMM activity-state workflow.
 
 ## Output Conventions
 

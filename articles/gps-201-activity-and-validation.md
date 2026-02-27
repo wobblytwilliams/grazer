@@ -1,14 +1,15 @@
-# GPS 201: Activity Classification and Validation
+# GPS 201: GMM Activity Classification and Validation
 
 ## Overview
 
 This tutorial covers the next stage after cleaning and metric
 generation:
 
-1.  classify each GPS row as `active` or `inactive`,
-2.  manually label rows in an interactive app,
-3.  compare model predictions against labels,
-4.  rank parameter settings by agreement.
+1.  classify each GPS row as `active` or `inactive` with GMM,
+2.  smooth state flicker with HMM-based temporal smoothing,
+3.  manually label rows in an interactive app,
+4.  compare model predictions against labels,
+5.  rank parameter settings by agreement.
 
 ## Why This Workflow?
 
@@ -84,37 +85,45 @@ Common pitfalls and checks:
 - Pitfall: tuning on too broad a window early on.  
   Check: begin with one animal and a short period, then scale up.
 
-## 3) Run consensus active/inactive classification
+## 3) Run GMM active/inactive classification
 
-[`grz_classify_activity_consensus()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.md)
-combines HMM and spatial signals into one final state column.
+[`grz_classify_activity_gmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_gmm.md)
+fits a two-component Gaussian mixture on movement features, then can
+apply optional HMM smoothing to reduce rapid state flicker.
 
 ``` r
-gps_states <- grz_classify_activity_consensus(
+gps_states <- grz_classify_activity_gmm(
   data = gps,
   groups = "sensor_id",
+  feature_set = "adaptive",
+  adaptive_window_mins = "auto",
+  adaptive_window_mult = 4,
+  adaptive_window_min_mins = 30,
+  smoothing = "hmm",
+  hmm_self_transition = 0.98,
   verbose = FALSE
 )
 
 state_view <- gps_states %>%
   as_tibble() %>%
-  select(sensor_id, datetime, lon, lat, activity_state_consensus)
+  select(sensor_id, datetime, lon, lat, activity_state_gmm, inactive_prob_gmm)
 
 state_view
-#> # A tibble: 802 × 5
-#>    sensor_id datetime              lon   lat activity_state_consensus
-#>    <chr>     <dttm>              <dbl> <dbl> <chr>                   
-#>  1 A01       2024-06-01 00:00:00  132. -14.5 active                  
-#>  2 A01       2024-06-01 00:10:00  132. -14.5 active                  
-#>  3 A01       2024-06-01 00:20:00  132. -14.5 active                  
-#>  4 A01       2024-06-01 00:30:00  132. -14.5 active                  
-#>  5 A01       2024-06-01 00:40:00  132. -14.5 active                  
-#>  6 A01       2024-06-01 00:50:00  132. -14.5 active                  
-#>  7 A01       2024-06-01 01:00:00  132. -14.5 active                  
-#>  8 A01       2024-06-01 01:10:00  132. -14.5 active                  
-#>  9 A01       2024-06-01 01:20:00  132. -14.5 active                  
-#> 10 A01       2024-06-01 01:30:00  132. -14.5 inactive                
-#> # ℹ 792 more rows
+#> # A tibble: 864 × 6
+#>    sensor_id datetime              lon   lat activity_state_gmm
+#>    <chr>     <dttm>              <dbl> <dbl> <chr>             
+#>  1 A01       2024-06-01 00:00:00  132. -14.5 NA                
+#>  2 A01       2024-06-01 00:10:00  132. -14.5 NA                
+#>  3 A01       2024-06-01 00:20:00  132. -14.5 active            
+#>  4 A01       2024-06-01 00:30:00  132. -14.5 active            
+#>  5 A01       2024-06-01 00:40:00  132. -14.5 active            
+#>  6 A01       2024-06-01 00:50:00  132. -14.5 active            
+#>  7 A01       2024-06-01 01:00:00  132. -14.5 active            
+#>  8 A01       2024-06-01 01:10:00  132. -14.5 active            
+#>  9 A01       2024-06-01 01:20:00  132. -14.5 active            
+#> 10 A01       2024-06-01 01:30:00  132. -14.5 inactive          
+#> # ℹ 854 more rows
+#> # ℹ 1 more variable: inactive_prob_gmm <dbl>
 
 state_more <- setdiff(names(gps_states), names(state_view))
 cat(
@@ -125,45 +134,42 @@ cat(
   if (length(state_more) > 10) ", ..." else "",
   "\n"
 )
-#> i 14 more columns: step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_state_hmm, activity_state_id_hmm, inactive_prob_hmm , ...
+#> i 10 more columns: lon_raw, lat_raw, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_component_gmm
 ```
 
 Key state variables in this workflow:
 
-- `activity_state_hmm`: HMM-based `active`/`inactive` estimate.
-- `inactive_prob_hmm`: HMM inactivity probability.
-- `activity_state_spatial`: spatial clustering based estimate.
-- `activity_state_consensus`: final state after combining methods.
-- `inactive_score_consensus`: consensus inactivity score (0 to 1).
+- `activity_state_gmm`: final `active`/`inactive` state after optional
+  smoothing.
+- `inactive_prob_gmm`: inactivity probability (smoothed if
+  `smoothing = "hmm"`).
+- `activity_component_gmm`: assigned mixture component id.
 
 How this works in practice:
 
-- HMM uses movement features to estimate latent activity states.
-- Spatial classifier identifies local dwell/stay behaviour from position
-  patterns.
-- Consensus combines both signals into a final `active`/`inactive`
-  decision.
+- GMM separates low-movement and high-movement behaviour from engineered
+  features.
+- Optional HMM smoothing adds temporal consistency to state sequences.
 
 Common pitfalls and checks:
 
-- Pitfall: assuming one classifier is always correct.  
-  Check: inspect both component outputs (`hmm` and `spatial`) before
-  consensus.
+- Pitfall: assuming one setting is always correct across deployments.  
+  Check: tune and validate on representative subsets.
 - Pitfall: class imbalance leading to misleading accuracy.  
   Check: inspect class proportions by day and animal.
 
 ``` r
 gps_states %>%
   as_tibble() %>%
-  ggplot(aes(x = lon, y = lat, color = activity_state_consensus)) +
+  ggplot(aes(x = lon, y = lat, color = activity_state_gmm)) +
   geom_point(alpha = 0.7, size = 1.3) +
   facet_wrap(~sensor_id, scales = "free") +
   scale_color_manual(values = c(active = "#1a9641", inactive = "#d7191c")) +
   labs(
-    title = "State Classification in Space",
+    title = "GMM Activity State Classification in Space",
     x = "Longitude",
     y = "Latitude",
-    color = "Consensus state"
+    color = "State"
   ) +
   theme_minimal()
 ```
@@ -173,7 +179,7 @@ gps_states %>%
 ``` r
 grz_plot_diurnal_states(
   data = gps_states,
-  state_col = "activity_state_consensus",
+  state_col = "activity_state_gmm",
   group_col = "sensor_id",
   plot_type = "line"
 )
@@ -185,12 +191,12 @@ grz_plot_diurnal_states(
 gps_states %>%
   as_tibble() %>%
   mutate(day = as.Date(datetime)) %>%
-  group_by(sensor_id, day, activity_state_consensus) %>%
+  group_by(sensor_id, day, activity_state_gmm) %>%
   summarise(n = n(), .groups = "drop") %>%
   group_by(sensor_id, day) %>%
   mutate(prop = n / sum(n)) %>%
   ungroup() %>%
-  ggplot(aes(x = day, y = prop, fill = activity_state_consensus)) +
+  ggplot(aes(x = day, y = prop, fill = activity_state_gmm)) +
   geom_col(position = "stack") +
   facet_wrap(~sensor_id) +
   scale_fill_manual(values = c(active = "#1a9641", inactive = "#d7191c")) +
@@ -198,7 +204,7 @@ gps_states %>%
     title = "Daily Proportion of Active vs Inactive States",
     x = "Day",
     y = "Proportion of fixes",
-    fill = "Consensus state"
+    fill = "State"
   ) +
   theme_minimal()
 ```
@@ -263,7 +269,7 @@ In your project, replace this with manual labels from
 
 ``` r
 labelled <- gps_states
-labelled$label <- labelled$activity_state_consensus
+labelled$label <- labelled$activity_state_gmm
 
 set.seed(303)
 flip_n <- floor(0.1 * nrow(labelled))
@@ -277,24 +283,23 @@ labelled$label[flip_idx] <- ifelse(
 
 label_view <- labelled %>%
   as_tibble() %>%
-  select(sensor_id, datetime, activity_state_consensus, label, inactive_score_consensus)
+  select(sensor_id, datetime, activity_state_gmm, label, inactive_prob_gmm)
 
 label_view
-#> # A tibble: 802 × 5
-#>    sensor_id datetime            activity_state_consensus label   
-#>    <chr>     <dttm>              <chr>                    <chr>   
-#>  1 A01       2024-06-01 00:00:00 active                   active  
-#>  2 A01       2024-06-01 00:10:00 active                   active  
-#>  3 A01       2024-06-01 00:20:00 active                   active  
-#>  4 A01       2024-06-01 00:30:00 active                   active  
-#>  5 A01       2024-06-01 00:40:00 active                   inactive
-#>  6 A01       2024-06-01 00:50:00 active                   active  
-#>  7 A01       2024-06-01 01:00:00 active                   active  
-#>  8 A01       2024-06-01 01:10:00 active                   active  
-#>  9 A01       2024-06-01 01:20:00 active                   active  
-#> 10 A01       2024-06-01 01:30:00 inactive                 inactive
-#> # ℹ 792 more rows
-#> # ℹ 1 more variable: inactive_score_consensus <dbl>
+#> # A tibble: 864 × 5
+#>    sensor_id datetime            activity_state_gmm label    inactive_prob_gmm
+#>    <chr>     <dttm>              <chr>              <chr>                <dbl>
+#>  1 A01       2024-06-01 00:00:00 NA                 NA            NA          
+#>  2 A01       2024-06-01 00:10:00 NA                 NA            NA          
+#>  3 A01       2024-06-01 00:20:00 active             active         0.000999   
+#>  4 A01       2024-06-01 00:30:00 active             active         0.000256   
+#>  5 A01       2024-06-01 00:40:00 active             inactive       0.000000155
+#>  6 A01       2024-06-01 00:50:00 active             active         0.000000120
+#>  7 A01       2024-06-01 01:00:00 active             active         0.000000132
+#>  8 A01       2024-06-01 01:10:00 active             active         0.000000322
+#>  9 A01       2024-06-01 01:20:00 active             active         0.000708   
+#> 10 A01       2024-06-01 01:30:00 inactive           inactive       1.000      
+#> # ℹ 854 more rows
 
 label_more <- setdiff(names(labelled), names(label_view))
 cat(
@@ -305,7 +310,7 @@ cat(
   if (length(label_more) > 10) ", ..." else "",
   "\n"
 )
-#> i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_state_hmm , ...
+#> i 12 more columns: lon, lat, lon_raw, lat_raw, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m , ...
 ```
 
 How this works in practice:
@@ -314,43 +319,32 @@ How this works in practice:
 - Only valid binary states (`active`, `inactive`) are included for
   scoring.
 
-Common pitfalls and checks:
-
-- Pitfall: comparing with stale predictions from different
-  preprocessing.  
-  Check: regenerate predictions from the same cleaned dataset used for
-  labels.
-- Pitfall: hidden leakage from copying predicted labels into truth
-  labels.  
-  Check: keep manually-labelled files separate from model outputs.
-
 ## 6) Tune parameters and rank the top 3 settings
 
 ``` r
 grid <- tidyr::expand_grid(
-  inactive_threshold = c(0.50, 0.55, 0.60),
-  spatial_radius_m = c(15, 20),
-  spatial_min_dwell_mins = c(10, 20)
+  adaptive_window_mult = c(3, 4, 5),
+  hmm_self_transition = c(0.95, 0.975, 0.99)
 )
 
 results <- tibble()
 
 for (i in seq_len(nrow(grid))) {
-  pred <- grz_classify_activity_consensus(
+  pred <- grz_classify_activity_gmm(
     data = labelled,
     groups = "sensor_id",
-    decision_rule = "weighted",
-    inactive_threshold = grid$inactive_threshold[[i]],
-    spatial_radius_m = grid$spatial_radius_m[[i]],
-    spatial_min_dwell_mins = grid$spatial_min_dwell_mins[[i]],
-    spatial_min_points = 3L,
-    min_run_n = 2L,
+    feature_set = "adaptive",
+    adaptive_window_mins = "auto",
+    adaptive_window_mult = grid$adaptive_window_mult[[i]],
+    adaptive_window_min_mins = 30,
+    smoothing = "hmm",
+    hmm_self_transition = grid$hmm_self_transition[[i]],
     verbose = FALSE
   )
 
   comparison <- tibble(
     truth = tolower(trimws(as.character(labelled$label))),
-    pred = tolower(trimws(as.character(pred$activity_state_consensus)))
+    pred = tolower(trimws(as.character(pred$activity_state_gmm)))
   ) %>%
     filter(truth %in% c("active", "inactive")) %>%
     filter(pred %in% c("active", "inactive"))
@@ -365,9 +359,8 @@ for (i in seq_len(nrow(grid))) {
   results <- bind_rows(
     results,
     tibble(
-      inactive_threshold = grid$inactive_threshold[[i]],
-      spatial_radius_m = grid$spatial_radius_m[[i]],
-      spatial_min_dwell_mins = grid$spatial_min_dwell_mins[[i]],
+      adaptive_window_mult = grid$adaptive_window_mult[[i]],
+      hmm_self_transition = grid$hmm_self_transition[[i]],
       n_compared = n_compared,
       accuracy = accuracy
     )
@@ -378,42 +371,33 @@ top3 <- results %>%
   arrange(desc(accuracy), desc(n_compared)) %>%
   slice_head(n = 3) %>%
   mutate(accuracy_percent = round(100 * accuracy, 2)) %>%
-  select(inactive_threshold, spatial_radius_m, spatial_min_dwell_mins, n_compared, accuracy_percent)
+  select(adaptive_window_mult, hmm_self_transition, n_compared, accuracy_percent)
 
 top3
-#> # A tibble: 3 × 5
-#>   inactive_threshold spatial_radius_m spatial_min_dwell_mins n_compared
-#>                <dbl>            <dbl>                  <dbl>      <int>
-#> 1                0.6               20                     10        802
-#> 2                0.6               20                     20        802
-#> 3                0.6               15                     10        802
-#> # ℹ 1 more variable: accuracy_percent <dbl>
+#> # A tibble: 3 × 4
+#>   adaptive_window_mult hmm_self_transition n_compared accuracy_percent
+#>                  <dbl>               <dbl>      <int>            <dbl>
+#> 1                    4               0.975        860             90.1
+#> 2                    4               0.99         860             89.5
+#> 3                    4               0.95         860             88.7
 ```
 
 How this works in practice:
 
-- A parameter grid is evaluated with a consistent consensus rule.
+- A parameter grid is evaluated with a consistent GMM+HMM configuration.
 - Each setting is ranked by observed agreement against manual labels.
 - Top settings are candidates for holdout validation, not automatic
   final choices.
 
-Common pitfalls and checks:
-
-- Pitfall: overfitting thresholds to a single week/animal.  
-  Check: validate top settings on held-out animals and periods.
-- Pitfall: choosing accuracy only.  
-  Check: also inspect confusion matrix and error type balance.
-
 ``` r
 results %>%
   mutate(accuracy_percent = 100 * accuracy) %>%
-  ggplot(aes(x = factor(inactive_threshold), y = factor(spatial_radius_m), fill = accuracy_percent)) +
+  ggplot(aes(x = factor(adaptive_window_mult), y = factor(hmm_self_transition), fill = accuracy_percent)) +
   geom_tile(color = "white") +
-  facet_wrap(~spatial_min_dwell_mins) +
   labs(
-    title = "Consensus Accuracy Across Parameter Grid",
-    x = "inactive_threshold",
-    y = "spatial_radius_m",
+    title = "GMM Accuracy Across Parameter Grid",
+    x = "adaptive_window_mult",
+    y = "hmm_self_transition",
     fill = "Accuracy (%)"
   ) +
   theme_minimal()
@@ -424,21 +408,21 @@ results %>%
 ``` r
 best <- top3 %>% slice(1)
 
-best_pred <- grz_classify_activity_consensus(
+best_pred <- grz_classify_activity_gmm(
   data = labelled,
   groups = "sensor_id",
-  decision_rule = "weighted",
-  inactive_threshold = best$inactive_threshold[[1]],
-  spatial_radius_m = best$spatial_radius_m[[1]],
-  spatial_min_dwell_mins = best$spatial_min_dwell_mins[[1]],
-  spatial_min_points = 3L,
-  min_run_n = 2L,
+  feature_set = "adaptive",
+  adaptive_window_mins = "auto",
+  adaptive_window_mult = best$adaptive_window_mult[[1]],
+  adaptive_window_min_mins = 30,
+  smoothing = "hmm",
+  hmm_self_transition = best$hmm_self_transition[[1]],
   verbose = FALSE
 )
 
 confusion_df <- tibble(
   truth = tolower(trimws(as.character(labelled$label))),
-  pred = tolower(trimws(as.character(best_pred$activity_state_consensus)))
+  pred = tolower(trimws(as.character(best_pred$activity_state_gmm)))
 ) %>%
   filter(truth %in% c("active", "inactive")) %>%
   filter(pred %in% c("active", "inactive")) %>%
@@ -474,7 +458,7 @@ grz_plot_diurnal_metrics(
 # Behaviour diagnostics (feature summary, transitions, bouts, PCA)
 diagnostics <- grz_validate_behavior(
   data = labelled,
-  state_col = "activity_state_consensus",
+  state_col = "activity_state_gmm",
   groups = "sensor_id",
   pca = TRUE
 )
@@ -483,17 +467,6 @@ diagnostics <- grz_validate_behavior(
 [`grz_validate_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_behavior.md)
 returns state counts, transitions, bout summaries, and an optional PCA
 diagnostic for the selected state column.
-
-How this works in practice:
-
-- Transition and bout outputs help detect unstable state switching.
-- PCA and feature summaries help assess separation between labelled
-  states.
-
-Common pitfalls and checks:
-
-- Pitfall: interpreting PCA clusters as definitive behaviour classes.  
-  Check: use PCA as support, not as the sole decision criterion.
 
 ## Recommended Practice
 
@@ -506,12 +479,9 @@ Common pitfalls and checks:
 
 ## References
 
-- Zucchini, W., MacDonald, I. L., & Langrock, R. (2016).  
-  *Hidden Markov Models for Time Series: An Introduction Using R* (2nd
-  ed.).  
-  Core reference for HMM-based state modelling.
-- Li, Q., Zheng, Y., Xie, X., Chen, Y., Liu, W., & Ma, W.-Y. (2008).  
-  *Mining user similarity based on location history*. ACM SIGSPATIAL
-  GIS.  
-  Includes stay-point style concepts used in spatial inactivity
-  detection.
+- McLachlan, G., & Peel, D. (2000).  
+  *Finite Mixture Models*. Wiley.
+- Rabiner, L. R. (1989).  
+  *A tutorial on hidden Markov models and selected applications in
+  speech recognition*.  
+  *Proceedings of the IEEE*, 77(2), 257-286.

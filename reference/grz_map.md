@@ -61,7 +61,7 @@ grz_map(
 - state_col:
 
   Optional state column for fixed state coloring (for example
-  `activity_state_hmm`).
+  `activity_state_gmm`).
 
 - state_colors:
 

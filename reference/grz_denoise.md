@@ -1,17 +1,21 @@
-# Denoise static GPS jitter
+# Denoise GPS jitter using statistical or state-aware smoothing
 
-Drops near-duplicate static fixes by retaining the first point and then
-retaining additional points only when movement exceeds `radius_m` or
-elapsed time exceeds `max_gap_mins`.
+Uses statistical smoothing to reduce coordinate noise without dropping
+rows. If active/inactive state labels are available, a state-aware
+method can be used where inactive runs are collapsed to a robust
+centroid and active runs are smoothed statistically.
 
 ## Usage
 
 ``` r
 grz_denoise(
   data,
-  radius_m = 8,
-  max_gap_mins = 20,
+  method = c("auto", "state_aware", "statistical"),
+  state_col = NULL,
+  inactive_states = c("inactive", "rest", "resting", "idle", "stationary", "lying",
+    "ruminating"),
   groups = NULL,
+  keep_raw_coords = TRUE,
   verbose = TRUE,
   snapshot = FALSE,
   return_class = c("data.frame", "data.table")
@@ -24,21 +28,32 @@ grz_denoise(
 
   Data frame of GPS rows.
 
-- radius_m:
+- method:
 
-  Spatial jitter tolerance in meters.
+  Denoise method: `"auto"`, `"state_aware"`, or `"statistical"`.
+  `"auto"` uses state-aware denoising when a usable state column is
+  present; otherwise statistical smoothing is used.
 
-- max_gap_mins:
+- state_col:
 
-  Maximum retained gap while static.
+  Optional state column used for `"state_aware"` mode.
+
+- inactive_states:
+
+  Character values treated as inactive in state-aware mode.
 
 - groups:
 
   Grouping columns for denoise run.
 
+- keep_raw_coords:
+
+  Logical; when `TRUE`, adds `lon_raw` and `lat_raw` columns before
+  replacing `lon` and `lat`.
+
 - verbose:
 
-  Logical; print drop counts.
+  Logical; print processing details.
 
 - snapshot:
 
@@ -50,4 +65,4 @@ grz_denoise(
 
 ## Value
 
-Denoised data.
+Denoised data (row count unchanged).

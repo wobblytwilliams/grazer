@@ -1,8 +1,7 @@
 # Cleaning pipeline wrapper
 
 Applies selected cleaning steps and returns cleaned data. By design,
-cleaning steps drop rows and print row-count changes when
-`verbose = TRUE`.
+cleaning steps report row-count changes when `verbose = TRUE`.
 
 ## Usage
 
@@ -16,6 +15,11 @@ grz_clean(
   buffer_m = 100,
   append_paddock = TRUE,
   paddock_col = "paddock",
+  denoise_method = c("auto", "state_aware", "statistical"),
+  denoise_state_col = NULL,
+  denoise_inactive_states = c("inactive", "rest", "resting", "idle", "stationary",
+    "lying", "ruminating"),
+  denoise_keep_raw_coords = TRUE,
   groups = NULL,
   snapshot = FALSE,
   verbose = TRUE,
@@ -57,6 +61,23 @@ grz_clean(
 - paddock_col:
 
   Output paddock column name.
+
+- denoise_method:
+
+  Denoise method passed to
+  [`grz_denoise()`](https://wobblytwilliams.github.io/grazer/reference/grz_denoise.md).
+
+- denoise_state_col:
+
+  Optional state column for state-aware denoise.
+
+- denoise_inactive_states:
+
+  Inactive state labels for state-aware denoise.
+
+- denoise_keep_raw_coords:
+
+  Logical; keep `lon_raw` and `lat_raw`.
 
 - groups:
 

@@ -196,20 +196,20 @@ gps_clean <- grz_clean(
 #> [clean_errors] dropped: 2 | rows: 1,296 -> 1,294
 #> [clean_speed_fixed] threshold=4.000 m/s
 #> [clean_speed_fixed] dropped: 0 | rows: 1,294 -> 1,294
-#> [denoise] radius_m=8.0 max_gap_mins=20.0
-#> [denoise] dropped: 108 | rows: 1,294 -> 1,186
-#> [clean] final_rows=1,186
+#> [denoise] method=statistical
+#> [denoise] dropped: 0 | rows: 1,294 -> 1,294
+#> [clean] final_rows=1,294
 
 nrow(gps_clean)
-#> [1] 1186
+#> [1] 1294
 head(gps_clean)
-#>   sensor_id            datetime      lon       lat
-#> 1       A01 2024-05-01 00:00:00 132.3049 -14.47395
-#> 2       A01 2024-05-01 00:10:00 132.3050 -14.47391
-#> 3       A01 2024-05-01 00:20:00 132.3049 -14.47379
-#> 4       A01 2024-05-01 00:30:00 132.3050 -14.47394
-#> 5       A01 2024-05-01 00:40:00 132.3050 -14.47372
-#> 6       A01 2024-05-01 00:50:00 132.3052 -14.47383
+#>   sensor_id            datetime      lon       lat  lon_raw   lat_raw
+#> 1       A01 2024-05-01 00:00:00 132.3050 -14.47393 132.3049 -14.47395
+#> 2       A01 2024-05-01 00:10:00 132.3050 -14.47390 132.3050 -14.47391
+#> 3       A01 2024-05-01 00:20:00 132.3050 -14.47387 132.3049 -14.47379
+#> 4       A01 2024-05-01 00:30:00 132.3050 -14.47385 132.3050 -14.47394
+#> 5       A01 2024-05-01 00:40:00 132.3051 -14.47382 132.3050 -14.47372
+#> 6       A01 2024-05-01 00:50:00 132.3052 -14.47379 132.3052 -14.47383
 ```
 
 How this works in practice:
@@ -237,20 +237,20 @@ movement_view <- gps_movement %>%
   select(sensor_id, datetime, step_m, speed_mps, turn_rad)
 
 movement_view
-#> # A tibble: 1,186 × 5
+#> # A tibble: 1,294 × 5
 #>    sensor_id datetime            step_m speed_mps turn_rad
 #>    <chr>     <dttm>               <dbl>     <dbl>    <dbl>
-#>  1 A01       2024-05-01 00:00:00   NA     NA        NA    
-#>  2 A01       2024-05-01 00:10:00   11.5    0.0192   NA    
-#>  3 A01       2024-05-01 00:20:00   18.1    0.0302    2.00 
-#>  4 A01       2024-05-01 00:30:00   17.1    0.0284    2.58 
-#>  5 A01       2024-05-01 00:40:00   25.5    0.0425    2.66 
-#>  6 A01       2024-05-01 00:50:00   25.8    0.0430    1.82 
-#>  7 A01       2024-05-01 01:00:00   12.1    0.0202    0.623
-#>  8 A01       2024-05-01 01:20:00   19.8    0.0165    0.532
-#>  9 A01       2024-05-01 01:40:00   12.3    0.0103    1.74 
-#> 10 A01       2024-05-01 01:50:00   15.6    0.0259    2.21 
-#> # ℹ 1,176 more rows
+#>  1 A01       2024-05-01 00:00:00  NA     NA        NA     
+#>  2 A01       2024-05-01 00:10:00   4.31   0.00718  NA     
+#>  3 A01       2024-05-01 00:20:00   2.80   0.00466   0.166 
+#>  4 A01       2024-05-01 00:30:00   4.18   0.00697   0.739 
+#>  5 A01       2024-05-01 00:40:00   8.44   0.0141    0.253 
+#>  6 A01       2024-05-01 00:50:00  11.3    0.0189    0.0933
+#>  7 A01       2024-05-01 01:00:00  12.0    0.0200    0.0903
+#>  8 A01       2024-05-01 01:10:00  10.5    0.0174    0.147 
+#>  9 A01       2024-05-01 01:20:00   7.59   0.0127    0.281 
+#> 10 A01       2024-05-01 01:30:00   5.00   0.00834   0.272 
+#> # ℹ 1,284 more rows
 
 movement_more <- setdiff(names(gps_movement), names(movement_view))
 cat(
@@ -261,7 +261,7 @@ cat(
   if (length(movement_more) > 10) ", ..." else "",
   "\n"
 )
-#> i 6 more columns: lon, lat, step_dt_s, bearing_deg, cum_distance_m, net_displacement_m
+#> i 8 more columns: lon, lat, lon_raw, lat_raw, step_dt_s, bearing_deg, cum_distance_m, net_displacement_m
 ```
 
 Key movement variables:
@@ -349,20 +349,20 @@ social_view <- gps_social_tbl %>%
   select(sensor_id, datetime, nearest_neighbor_m, n_within_30m, mean_dist_to_others_m)
 
 social_view
-#> # A tibble: 1,186 × 5
+#> # A tibble: 1,294 × 5
 #>    sensor_id datetime            nearest_neighbor_m n_within_30m
 #>    <chr>     <dttm>                           <dbl>        <int>
-#>  1 A01       2024-05-01 00:00:00               706.            0
-#>  2 A01       2024-05-01 00:10:00               711.            0
-#>  3 A01       2024-05-01 00:20:00               711.            0
-#>  4 A01       2024-05-01 00:30:00               708.            0
-#>  5 A01       2024-05-01 00:40:00               698.            0
-#>  6 A01       2024-05-01 00:50:00               672.            0
-#>  7 A01       2024-05-01 01:00:00               947.            0
-#>  8 A01       2024-05-01 01:20:00               678.            0
-#>  9 A01       2024-05-01 01:40:00               736.            0
-#> 10 A01       2024-05-01 01:50:00               959.            0
-#> # ℹ 1,176 more rows
+#>  1 A01       2024-05-01 00:00:00               709.            0
+#>  2 A01       2024-05-01 00:10:00               710.            0
+#>  3 A01       2024-05-01 00:20:00               708.            0
+#>  4 A01       2024-05-01 00:30:00               703.            0
+#>  5 A01       2024-05-01 00:40:00               694.            0
+#>  6 A01       2024-05-01 00:50:00               684.            0
+#>  7 A01       2024-05-01 01:00:00               677.            0
+#>  8 A01       2024-05-01 01:10:00               677.            0
+#>  9 A01       2024-05-01 01:20:00               684.            0
+#> 10 A01       2024-05-01 01:30:00               698.            0
+#> # ℹ 1,284 more rows
 #> # ℹ 1 more variable: mean_dist_to_others_m <dbl>
 
 social_more <- setdiff(names(gps_social), names(social_view))
@@ -374,7 +374,7 @@ cat(
   if (length(social_more) > 10) ", ..." else "",
   "\n"
 )
-#> i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, social_group_size , ...
+#> i 17 more columns: lon, lat, lon_raw, lat_raw, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m , ...
 ```
 
 Key social variables:
@@ -413,8 +413,6 @@ gps_social_tbl %>%
     fill = "Sensor ID"
   ) +
   theme_minimal()
-#> Warning: Removed 6 rows containing non-finite outside the scale range
-#> (`stat_density()`).
 ```
 
 ![](gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png)
@@ -456,15 +454,15 @@ summary_view
 #> # A tibble: 9 × 5
 #>   sensor_id epoch      total_distance_m mean_nn_m mcp95_area_ha
 #>   <chr>     <chr>                 <dbl>     <dbl>         <dbl>
-#> 1 A01       2024-05-01            3133.      792.          4.32
-#> 2 A01       2024-05-02            2651.      871.          5.32
-#> 3 A01       2024-05-03            3244.      814.          4.91
-#> 4 A02       2024-05-01            3455.      782.          6.01
-#> 5 A02       2024-05-02            3369.      802.          8.08
-#> 6 A02       2024-05-03            3460.      776.          4.36
-#> 7 A03       2024-05-01            3370.     1050.          6.63
-#> 8 A03       2024-05-02            2989.      980.          6.35
-#> 9 A03       2024-05-03            3059.     1697.          8.54
+#> 1 A01       2024-05-01            1611.      751.          3.89
+#> 2 A01       2024-05-02            1358.      850.          4.39
+#> 3 A01       2024-05-03            1487.      718.          3.66
+#> 4 A02       2024-05-01            1469.      759.          5.04
+#> 5 A02       2024-05-02            1637.      781.          6.97
+#> 6 A02       2024-05-03            1523.      718.          3.54
+#> 7 A03       2024-05-01            1358.     1018.          4.78
+#> 8 A03       2024-05-02            1513.      964.          5.43
+#> 9 A03       2024-05-03            1277.     1653.          6.73
 
 summary_more <- setdiff(names(daily_metrics), names(summary_view))
 cat(

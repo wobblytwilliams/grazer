@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>GPS 201: Activity Classification and Validation • grazer</title>
+<title>GPS 201: GMM Activity Classification and Validation • grazer</title>
 <!-- favicons --><link rel="icon" type="image/png" sizes="96x96" href="../favicon-96x96.png">
 <link rel="icon" type="”image/svg+xml”" href="../favicon.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
@@ -16,7 +16,7 @@
 <script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<meta property="og:title" content="GPS 201: Activity Classification and Validation">
+<meta property="og:title" content="GPS 201: GMM Activity Classification and Validation">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -42,7 +42,7 @@
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tutorials</h6></li>
     <li><a class="dropdown-item" href="../articles/gps-101-core-workflow.html">GPS 101: Core Workflow</a></li>
-    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: Activity Classification and Validation</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: GMM Activity Classification and Validation</a></li>
   </ul>
 </li>
       </ul>
@@ -60,7 +60,7 @@
 
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
-      <img src="../logo.png" class="logo" alt=""><h1>GPS 201: Activity Classification and Validation</h1>
+      <img src="../logo.png" class="logo" alt=""><h1>GPS 201: GMM Activity Classification and Validation</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/wobblytwilliams/grazer/blob/main/vignettes/gps-201-activity-and-validation.Rmd" class="external-link"><code>vignettes/gps-201-activity-and-validation.Rmd</code></a></small>
@@ -76,7 +76,8 @@
 generation:</p>
 <ol style="list-style-type: decimal">
 <li>classify each GPS row as <code>active</code> or
-<code>inactive</code>,</li>
+<code>inactive</code> with GMM,</li>
+<li>smooth state flicker with HMM-based temporal smoothing,</li>
 <li>manually label rows in an interactive app,</li>
 <li>compare model predictions against labels,</li>
 <li>rank parameter settings by agreement.</li>
@@ -163,36 +164,44 @@ Check: begin with one animal and a short period, then scale up.</li>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="run-consensus-activeinactive-classification">3) Run consensus active/inactive classification<a class="anchor" aria-label="anchor" href="#run-consensus-activeinactive-classification"></a>
+<h2 id="run-gmm-activeinactive-classification">3) Run GMM active/inactive classification<a class="anchor" aria-label="anchor" href="#run-gmm-activeinactive-classification"></a>
 </h2>
-<p><code><a href="../reference/grz_classify_activity_consensus.html">grz_classify_activity_consensus()</a></code> combines HMM and
-spatial signals into one final state column.</p>
+<p><code><a href="../reference/grz_classify_activity_gmm.html">grz_classify_activity_gmm()</a></code> fits a two-component
+Gaussian mixture on movement features, then can apply optional HMM
+smoothing to reduce rapid state flicker.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">gps_states</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_classify_activity_consensus.html">grz_classify_activity_consensus</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">gps_states</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_classify_activity_gmm.html">grz_classify_activity_gmm</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps</span>,</span>
 <span>  groups <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
+<span>  feature_set <span class="op">=</span> <span class="st">"adaptive"</span>,</span>
+<span>  adaptive_window_mins <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>  adaptive_window_mult <span class="op">=</span> <span class="fl">4</span>,</span>
+<span>  adaptive_window_min_mins <span class="op">=</span> <span class="fl">30</span>,</span>
+<span>  smoothing <span class="op">=</span> <span class="st">"hmm"</span>,</span>
+<span>  hmm_self_transition <span class="op">=</span> <span class="fl">0.98</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">state_view</span> <span class="op">&lt;-</span> <span class="va">gps_states</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">datetime</span>, <span class="va">lon</span>, <span class="va">lat</span>, <span class="va">activity_state_consensus</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">datetime</span>, <span class="va">lon</span>, <span class="va">lat</span>, <span class="va">activity_state_gmm</span>, <span class="va">inactive_prob_gmm</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">state_view</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 802 × 5</span></span></span>
-<span><span class="co">#&gt;    sensor_id datetime              lon   lat activity_state_consensus</span></span>
-<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                   </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-06-01 <span style="color: #949494;">00:00:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-06-01 <span style="color: #949494;">00:10:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-06-01 <span style="color: #949494;">00:20:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-06-01 <span style="color: #949494;">00:30:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-06-01 <span style="color: #949494;">00:40:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-06-01 <span style="color: #949494;">00:50:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-06-01 <span style="color: #949494;">01:00:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-06-01 <span style="color: #949494;">01:10:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-06-01 <span style="color: #949494;">01:20:00</span>  132. -<span style="color: #BB0000;">14.5</span> active                  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-06-01 <span style="color: #949494;">01:30:00</span>  132. -<span style="color: #BB0000;">14.5</span> inactive                </span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 792 more rows</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 864 × 6</span></span></span>
+<span><span class="co">#&gt;    sensor_id datetime              lon   lat activity_state_gmm</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-06-01 <span style="color: #949494;">00:00:00</span>  132. -<span style="color: #BB0000;">14.5</span> <span style="color: #BB0000;">NA</span>                </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-06-01 <span style="color: #949494;">00:10:00</span>  132. -<span style="color: #BB0000;">14.5</span> <span style="color: #BB0000;">NA</span>                </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-06-01 <span style="color: #949494;">00:20:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-06-01 <span style="color: #949494;">00:30:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-06-01 <span style="color: #949494;">00:40:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-06-01 <span style="color: #949494;">00:50:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-06-01 <span style="color: #949494;">01:00:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-06-01 <span style="color: #949494;">01:10:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-06-01 <span style="color: #949494;">01:20:00</span>  132. -<span style="color: #BB0000;">14.5</span> active            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-06-01 <span style="color: #949494;">01:30:00</span>  132. -<span style="color: #BB0000;">14.5</span> inactive          </span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 854 more rows</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: inactive_prob_gmm &lt;dbl&gt;</span></span></span>
 <span></span>
 <span><span class="va">state_more</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://generics.r-lib.org/reference/setops.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gps_states</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">state_view</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span></span>
@@ -203,59 +212,54 @@ spatial signals into one final state column.</p>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">state_more</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">10</span><span class="op">)</span> <span class="st">", ..."</span> <span class="kw">else</span> <span class="st">""</span>,</span>
 <span>  <span class="st">"\n"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt; i 14 more columns: step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_state_hmm, activity_state_id_hmm, inactive_prob_hmm , ...</span></span></code></pre></div>
+<span><span class="co">#&gt; i 10 more columns: lon_raw, lat_raw, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_component_gmm</span></span></code></pre></div>
 <p>Key state variables in this workflow:</p>
 <ul>
 <li>
-<code>activity_state_hmm</code>: HMM-based
-<code>active</code>/<code>inactive</code> estimate.</li>
+<code>activity_state_gmm</code>: final
+<code>active</code>/<code>inactive</code> state after optional
+smoothing.</li>
 <li>
-<code>inactive_prob_hmm</code>: HMM inactivity probability.</li>
+<code>inactive_prob_gmm</code>: inactivity probability (smoothed if
+<code>smoothing = "hmm"</code>).</li>
 <li>
-<code>activity_state_spatial</code>: spatial clustering based
-estimate.</li>
-<li>
-<code>activity_state_consensus</code>: final state after combining
-methods.</li>
-<li>
-<code>inactive_score_consensus</code>: consensus inactivity score (0
-to 1).</li>
+<code>activity_component_gmm</code>: assigned mixture component
+id.</li>
 </ul>
 <p>How this works in practice:</p>
 <ul>
-<li>HMM uses movement features to estimate latent activity states.</li>
-<li>Spatial classifier identifies local dwell/stay behaviour from
-position patterns.</li>
-<li>Consensus combines both signals into a final
-<code>active</code>/<code>inactive</code> decision.</li>
+<li>GMM separates low-movement and high-movement behaviour from
+engineered features.</li>
+<li>Optional HMM smoothing adds temporal consistency to state
+sequences.</li>
 </ul>
 <p>Common pitfalls and checks:</p>
 <ul>
-<li>Pitfall: assuming one classifier is always correct.<br>
-Check: inspect both component outputs (<code>hmm</code> and
-<code>spatial</code>) before consensus.</li>
+<li>Pitfall: assuming one setting is always correct across
+deployments.<br>
+Check: tune and validate on representative subsets.</li>
 <li>Pitfall: class imbalance leading to misleading accuracy.<br>
 Check: inspect class proportions by day and animal.</li>
 </ul>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_states</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">lon</span>, y <span class="op">=</span> <span class="va">lat</span>, color <span class="op">=</span> <span class="va">activity_state_consensus</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">lon</span>, y <span class="op">=</span> <span class="va">lat</span>, color <span class="op">=</span> <span class="va">activity_state_gmm</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span>alpha <span class="op">=</span> <span class="fl">0.7</span>, size <span class="op">=</span> <span class="fl">1.3</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span><span class="va">sensor_id</span>, scales <span class="op">=</span> <span class="st">"free"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_manual.html" class="external-link">scale_color_manual</a></span><span class="op">(</span>values <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>active <span class="op">=</span> <span class="st">"#1a9641"</span>, inactive <span class="op">=</span> <span class="st">"#d7191c"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span></span>
-<span>    title <span class="op">=</span> <span class="st">"State Classification in Space"</span>,</span>
+<span>    title <span class="op">=</span> <span class="st">"GMM Activity State Classification in Space"</span>,</span>
 <span>    x <span class="op">=</span> <span class="st">"Longitude"</span>,</span>
 <span>    y <span class="op">=</span> <span class="st">"Latitude"</span>,</span>
-<span>    color <span class="op">=</span> <span class="st">"Consensus state"</span></span>
+<span>    color <span class="op">=</span> <span class="st">"State"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-5-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/grz_plot_diurnal_states.html">grz_plot_diurnal_states</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps_states</span>,</span>
-<span>  state_col <span class="op">=</span> <span class="st">"activity_state_consensus"</span>,</span>
+<span>  state_col <span class="op">=</span> <span class="st">"activity_state_gmm"</span>,</span>
 <span>  group_col <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
 <span>  plot_type <span class="op">=</span> <span class="st">"line"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -264,12 +268,12 @@ Check: inspect class proportions by day and animal.</li>
 <code class="sourceCode R"><span><span class="va">gps_states</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>day <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="va">datetime</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html" class="external-link">group_by</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">day</span>, <span class="va">activity_state_consensus</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html" class="external-link">group_by</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">day</span>, <span class="va">activity_state_gmm</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/summarise.html" class="external-link">summarise</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/context.html" class="external-link">n</a></span><span class="op">(</span><span class="op">)</span>, .groups <span class="op">=</span> <span class="st">"drop"</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html" class="external-link">group_by</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">day</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>prop <span class="op">=</span> <span class="va">n</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">n</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html" class="external-link">ungroup</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">day</span>, y <span class="op">=</span> <span class="va">prop</span>, fill <span class="op">=</span> <span class="va">activity_state_consensus</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">day</span>, y <span class="op">=</span> <span class="va">prop</span>, fill <span class="op">=</span> <span class="va">activity_state_gmm</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_bar.html" class="external-link">geom_col</a></span><span class="op">(</span>position <span class="op">=</span> <span class="st">"stack"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span><span class="va">sensor_id</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_manual.html" class="external-link">scale_fill_manual</a></span><span class="op">(</span>values <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>active <span class="op">=</span> <span class="st">"#1a9641"</span>, inactive <span class="op">=</span> <span class="st">"#d7191c"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
@@ -277,7 +281,7 @@ Check: inspect class proportions by day and animal.</li>
 <span>    title <span class="op">=</span> <span class="st">"Daily Proportion of Active vs Inactive States"</span>,</span>
 <span>    x <span class="op">=</span> <span class="st">"Day"</span>,</span>
 <span>    y <span class="op">=</span> <span class="st">"Proportion of fixes"</span>,</span>
-<span>    fill <span class="op">=</span> <span class="st">"Consensus state"</span></span>
+<span>    fill <span class="op">=</span> <span class="st">"State"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="768"></p>
@@ -340,7 +344,7 @@ In your project, replace this with manual labels from
 <code><a href="../reference/grz_label_gps_states.html">grz_label_gps_states()</a></code>.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">labelled</span> <span class="op">&lt;-</span> <span class="va">gps_states</span></span>
-<span><span class="va">labelled</span><span class="op">$</span><span class="va">label</span> <span class="op">&lt;-</span> <span class="va">labelled</span><span class="op">$</span><span class="va">activity_state_consensus</span></span>
+<span><span class="va">labelled</span><span class="op">$</span><span class="va">label</span> <span class="op">&lt;-</span> <span class="va">labelled</span><span class="op">$</span><span class="va">activity_state_gmm</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">303</span><span class="op">)</span></span>
 <span><span class="va">flip_n</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">floor</a></span><span class="op">(</span><span class="fl">0.1</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">labelled</span><span class="op">)</span><span class="op">)</span></span>
@@ -354,24 +358,23 @@ In your project, replace this with manual labels from
 <span></span>
 <span><span class="va">label_view</span> <span class="op">&lt;-</span> <span class="va">labelled</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">datetime</span>, <span class="va">activity_state_consensus</span>, <span class="va">label</span>, <span class="va">inactive_score_consensus</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">datetime</span>, <span class="va">activity_state_gmm</span>, <span class="va">label</span>, <span class="va">inactive_prob_gmm</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">label_view</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 802 × 5</span></span></span>
-<span><span class="co">#&gt;    sensor_id datetime            activity_state_consensus label   </span></span>
-<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-06-01 <span style="color: #949494;">00:00:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-06-01 <span style="color: #949494;">00:10:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-06-01 <span style="color: #949494;">00:20:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-06-01 <span style="color: #949494;">00:30:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-06-01 <span style="color: #949494;">00:40:00</span> active                   inactive</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-06-01 <span style="color: #949494;">00:50:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-06-01 <span style="color: #949494;">01:00:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-06-01 <span style="color: #949494;">01:10:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-06-01 <span style="color: #949494;">01:20:00</span> active                   active  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-06-01 <span style="color: #949494;">01:30:00</span> inactive                 inactive</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 792 more rows</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: inactive_score_consensus &lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 864 × 5</span></span></span>
+<span><span class="co">#&gt;    sensor_id datetime            activity_state_gmm label    inactive_prob_gmm</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-06-01 <span style="color: #949494;">00:00:00</span> <span style="color: #BB0000;">NA</span>                 <span style="color: #BB0000;">NA</span>            <span style="color: #BB0000;">NA</span>          </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-06-01 <span style="color: #949494;">00:10:00</span> <span style="color: #BB0000;">NA</span>                 <span style="color: #BB0000;">NA</span>            <span style="color: #BB0000;">NA</span>          </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-06-01 <span style="color: #949494;">00:20:00</span> active             active         0.000<span style="text-decoration: underline;">999</span>   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-06-01 <span style="color: #949494;">00:30:00</span> active             active         0.000<span style="text-decoration: underline;">256</span>   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-06-01 <span style="color: #949494;">00:40:00</span> active             inactive       0.000<span style="text-decoration: underline;">000</span>155</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-06-01 <span style="color: #949494;">00:50:00</span> active             active         0.000<span style="text-decoration: underline;">000</span>120</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-06-01 <span style="color: #949494;">01:00:00</span> active             active         0.000<span style="text-decoration: underline;">000</span>132</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-06-01 <span style="color: #949494;">01:10:00</span> active             active         0.000<span style="text-decoration: underline;">000</span>322</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-06-01 <span style="color: #949494;">01:20:00</span> active             active         0.000<span style="text-decoration: underline;">708</span>   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-06-01 <span style="color: #949494;">01:30:00</span> inactive           inactive       1.000      </span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 854 more rows</span></span></span>
 <span></span>
 <span><span class="va">label_more</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://generics.r-lib.org/reference/setops.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">labelled</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">label_view</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span></span>
@@ -382,7 +385,7 @@ In your project, replace this with manual labels from
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">label_more</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">10</span><span class="op">)</span> <span class="st">", ..."</span> <span class="kw">else</span> <span class="st">""</span>,</span>
 <span>  <span class="st">"\n"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt; i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, activity_state_hmm , ...</span></span></code></pre></div>
+<span><span class="co">#&gt; i 12 more columns: lon, lat, lon_raw, lat_raw, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m , ...</span></span></code></pre></div>
 <p>How this works in practice:</p>
 <ul>
 <li>Truth labels and predicted states are compared on the same
@@ -390,45 +393,34 @@ rows.</li>
 <li>Only valid binary states (<code>active</code>,
 <code>inactive</code>) are included for scoring.</li>
 </ul>
-<p>Common pitfalls and checks:</p>
-<ul>
-<li>Pitfall: comparing with stale predictions from different
-preprocessing.<br>
-Check: regenerate predictions from the same cleaned dataset used for
-labels.</li>
-<li>Pitfall: hidden leakage from copying predicted labels into truth
-labels.<br>
-Check: keep manually-labelled files separate from model outputs.</li>
-</ul>
 </div>
 <div class="section level2">
 <h2 id="tune-parameters-and-rank-the-top-3-settings">6) Tune parameters and rank the top 3 settings<a class="anchor" aria-label="anchor" href="#tune-parameters-and-rank-the-top-3-settings"></a>
 </h2>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu">tidyr</span><span class="fu">::</span><span class="fu"><a href="https://tidyr.tidyverse.org/reference/expand_grid.html" class="external-link">expand_grid</a></span><span class="op">(</span></span>
-<span>  inactive_threshold <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.50</span>, <span class="fl">0.55</span>, <span class="fl">0.60</span><span class="op">)</span>,</span>
-<span>  spatial_radius_m <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">15</span>, <span class="fl">20</span><span class="op">)</span>,</span>
-<span>  spatial_min_dwell_mins <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">20</span><span class="op">)</span></span>
+<span>  adaptive_window_mult <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">4</span>, <span class="fl">5</span><span class="op">)</span>,</span>
+<span>  hmm_self_transition <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.95</span>, <span class="fl">0.975</span>, <span class="fl">0.99</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_classify_activity_consensus.html">grz_classify_activity_consensus</a></span><span class="op">(</span></span>
+<span>  <span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_classify_activity_gmm.html">grz_classify_activity_gmm</a></span><span class="op">(</span></span>
 <span>    data <span class="op">=</span> <span class="va">labelled</span>,</span>
 <span>    groups <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
-<span>    decision_rule <span class="op">=</span> <span class="st">"weighted"</span>,</span>
-<span>    inactive_threshold <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">inactive_threshold</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>    spatial_radius_m <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">spatial_radius_m</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>    spatial_min_dwell_mins <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">spatial_min_dwell_mins</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>    spatial_min_points <span class="op">=</span> <span class="fl">3L</span>,</span>
-<span>    min_run_n <span class="op">=</span> <span class="fl">2L</span>,</span>
+<span>    feature_set <span class="op">=</span> <span class="st">"adaptive"</span>,</span>
+<span>    adaptive_window_mins <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>    adaptive_window_mult <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">adaptive_window_mult</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>    adaptive_window_min_mins <span class="op">=</span> <span class="fl">30</span>,</span>
+<span>    smoothing <span class="op">=</span> <span class="st">"hmm"</span>,</span>
+<span>    hmm_self_transition <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">hmm_self_transition</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
 <span>    verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span></span>
 <span></span>
 <span>  <span class="va">comparison</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
 <span>    truth <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">labelled</span><span class="op">$</span><span class="va">label</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>    pred <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">pred</span><span class="op">$</span><span class="va">activity_state_consensus</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>    pred <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">pred</span><span class="op">$</span><span class="va">activity_state_gmm</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>    <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">truth</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"active"</span>, <span class="st">"inactive"</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>    <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">pred</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"active"</span>, <span class="st">"inactive"</span><span class="op">)</span><span class="op">)</span></span>
@@ -443,9 +435,8 @@ Check: keep manually-labelled files separate from model outputs.</li>
 <span>  <span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">bind_rows</a></span><span class="op">(</span></span>
 <span>    <span class="va">results</span>,</span>
 <span>    <span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
-<span>      inactive_threshold <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">inactive_threshold</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>      spatial_radius_m <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">spatial_radius_m</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>      spatial_min_dwell_mins <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">spatial_min_dwell_mins</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>      adaptive_window_mult <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">adaptive_window_mult</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>      hmm_self_transition <span class="op">=</span> <span class="va">grid</span><span class="op">$</span><span class="va">hmm_self_transition</span><span class="op">[[</span><span class="va">i</span><span class="op">]</span><span class="op">]</span>,</span>
 <span>      n_compared <span class="op">=</span> <span class="va">n_compared</span>,</span>
 <span>      accuracy <span class="op">=</span> <span class="va">accuracy</span></span>
 <span>    <span class="op">)</span></span>
@@ -456,41 +447,33 @@ Check: keep manually-labelled files separate from model outputs.</li>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/desc.html" class="external-link">desc</a></span><span class="op">(</span><span class="va">accuracy</span><span class="op">)</span>, <span class="fu"><a href="https://dplyr.tidyverse.org/reference/desc.html" class="external-link">desc</a></span><span class="op">(</span><span class="va">n_compared</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fl">3</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>accuracy_percent <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fl">100</span> <span class="op">*</span> <span class="va">accuracy</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">inactive_threshold</span>, <span class="va">spatial_radius_m</span>, <span class="va">spatial_min_dwell_mins</span>, <span class="va">n_compared</span>, <span class="va">accuracy_percent</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">adaptive_window_mult</span>, <span class="va">hmm_self_transition</span>, <span class="va">n_compared</span>, <span class="va">accuracy_percent</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">top3</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 5</span></span></span>
-<span><span class="co">#&gt;   inactive_threshold spatial_radius_m spatial_min_dwell_mins n_compared</span></span>
-<span><span class="co">#&gt;                <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>                0.6               20                     10        802</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>                0.6               20                     20        802</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>                0.6               15                     10        802</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: accuracy_percent &lt;dbl&gt;</span></span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 4</span></span></span>
+<span><span class="co">#&gt;   adaptive_window_mult hmm_self_transition n_compared accuracy_percent</span></span>
+<span><span class="co">#&gt;                  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>               <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>                    4               0.975        860             90.1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>                    4               0.99         860             89.5</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>                    4               0.95         860             88.7</span></span></code></pre></div>
 <p>How this works in practice:</p>
 <ul>
-<li>A parameter grid is evaluated with a consistent consensus rule.</li>
+<li>A parameter grid is evaluated with a consistent GMM+HMM
+configuration.</li>
 <li>Each setting is ranked by observed agreement against manual
 labels.</li>
 <li>Top settings are candidates for holdout validation, not automatic
 final choices.</li>
 </ul>
-<p>Common pitfalls and checks:</p>
-<ul>
-<li>Pitfall: overfitting thresholds to a single week/animal.<br>
-Check: validate top settings on held-out animals and periods.</li>
-<li>Pitfall: choosing accuracy only.<br>
-Check: also inspect confusion matrix and error type balance.</li>
-</ul>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">results</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>accuracy_percent <span class="op">=</span> <span class="fl">100</span> <span class="op">*</span> <span class="va">accuracy</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">inactive_threshold</span><span class="op">)</span>, y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">spatial_radius_m</span><span class="op">)</span>, fill <span class="op">=</span> <span class="va">accuracy_percent</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">adaptive_window_mult</span><span class="op">)</span>, y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">hmm_self_transition</span><span class="op">)</span>, fill <span class="op">=</span> <span class="va">accuracy_percent</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_tile.html" class="external-link">geom_tile</a></span><span class="op">(</span>color <span class="op">=</span> <span class="st">"white"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span><span class="va">spatial_min_dwell_mins</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span></span>
-<span>    title <span class="op">=</span> <span class="st">"Consensus Accuracy Across Parameter Grid"</span>,</span>
-<span>    x <span class="op">=</span> <span class="st">"inactive_threshold"</span>,</span>
-<span>    y <span class="op">=</span> <span class="st">"spatial_radius_m"</span>,</span>
+<span>    title <span class="op">=</span> <span class="st">"GMM Accuracy Across Parameter Grid"</span>,</span>
+<span>    x <span class="op">=</span> <span class="st">"adaptive_window_mult"</span>,</span>
+<span>    y <span class="op">=</span> <span class="st">"hmm_self_transition"</span>,</span>
 <span>    fill <span class="op">=</span> <span class="st">"Accuracy (%)"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
@@ -498,21 +481,21 @@ Check: also inspect confusion matrix and error type balance.</li>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">best</span> <span class="op">&lt;-</span> <span class="va">top3</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">best_pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_classify_activity_consensus.html">grz_classify_activity_consensus</a></span><span class="op">(</span></span>
+<span><span class="va">best_pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_classify_activity_gmm.html">grz_classify_activity_gmm</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">labelled</span>,</span>
 <span>  groups <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
-<span>  decision_rule <span class="op">=</span> <span class="st">"weighted"</span>,</span>
-<span>  inactive_threshold <span class="op">=</span> <span class="va">best</span><span class="op">$</span><span class="va">inactive_threshold</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>  spatial_radius_m <span class="op">=</span> <span class="va">best</span><span class="op">$</span><span class="va">spatial_radius_m</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>  spatial_min_dwell_mins <span class="op">=</span> <span class="va">best</span><span class="op">$</span><span class="va">spatial_min_dwell_mins</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
-<span>  spatial_min_points <span class="op">=</span> <span class="fl">3L</span>,</span>
-<span>  min_run_n <span class="op">=</span> <span class="fl">2L</span>,</span>
+<span>  feature_set <span class="op">=</span> <span class="st">"adaptive"</span>,</span>
+<span>  adaptive_window_mins <span class="op">=</span> <span class="st">"auto"</span>,</span>
+<span>  adaptive_window_mult <span class="op">=</span> <span class="va">best</span><span class="op">$</span><span class="va">adaptive_window_mult</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>  adaptive_window_min_mins <span class="op">=</span> <span class="fl">30</span>,</span>
+<span>  smoothing <span class="op">=</span> <span class="st">"hmm"</span>,</span>
+<span>  hmm_self_transition <span class="op">=</span> <span class="va">best</span><span class="op">$</span><span class="va">hmm_self_transition</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">confusion_df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
 <span>  truth <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">labelled</span><span class="op">$</span><span class="va">label</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  pred <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">best_pred</span><span class="op">$</span><span class="va">activity_state_consensus</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>  pred <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/trimws.html" class="external-link">trimws</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">best_pred</span><span class="op">$</span><span class="va">activity_state_gmm</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">truth</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"active"</span>, <span class="st">"inactive"</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">pred</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"active"</span>, <span class="st">"inactive"</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -546,26 +529,13 @@ Check: also inspect confusion matrix and error type balance.</li>
 <span><span class="co"># Behaviour diagnostics (feature summary, transitions, bouts, PCA)</span></span>
 <span><span class="va">diagnostics</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_validate_behavior.html">grz_validate_behavior</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">labelled</span>,</span>
-<span>  state_col <span class="op">=</span> <span class="st">"activity_state_consensus"</span>,</span>
+<span>  state_col <span class="op">=</span> <span class="st">"activity_state_gmm"</span>,</span>
 <span>  groups <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
 <span>  pca <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p><code><a href="../reference/grz_validate_behavior.html">grz_validate_behavior()</a></code> returns state counts,
 transitions, bout summaries, and an optional PCA diagnostic for the
 selected state column.</p>
-<p>How this works in practice:</p>
-<ul>
-<li>Transition and bout outputs help detect unstable state
-switching.</li>
-<li>PCA and feature summaries help assess separation between labelled
-states.</li>
-</ul>
-<p>Common pitfalls and checks:</p>
-<ul>
-<li>Pitfall: interpreting PCA clusters as definitive behaviour
-classes.<br>
-Check: use PCA as support, not as the sole decision criterion.</li>
-</ul>
 </div>
 <div class="section level2">
 <h2 id="recommended-practice">Recommended Practice<a class="anchor" aria-label="anchor" href="#recommended-practice"></a>
@@ -583,14 +553,9 @@ week).</li>
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
 <ul>
-<li>Zucchini, W., MacDonald, I. L., &amp; Langrock, R. (2016).<br><em>Hidden Markov Models for Time Series: An Introduction Using R</em>
-(2nd ed.).<br>
-Core reference for HMM-based state modelling.</li>
-<li>Li, Q., Zheng, Y., Xie, X., Chen, Y., Liu, W., &amp; Ma, W.-Y.
-(2008).<br><em>Mining user similarity based on location history</em>. ACM
-SIGSPATIAL GIS.<br>
-Includes stay-point style concepts used in spatial inactivity
-detection.</li>
+<li>McLachlan, G., &amp; Peel, D. (2000).<br><em>Finite Mixture Models</em>. Wiley.</li>
+<li>Rabiner, L. R. (1989).<br><em>A tutorial on hidden Markov models and selected applications in
+speech recognition</em>.<br><em>Proceedings of the IEEE</em>, 77(2), 257-286.</li>
 </ul>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

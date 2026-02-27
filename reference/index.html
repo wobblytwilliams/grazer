@@ -21,7 +21,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tutorials</h6></li>
     <li><a class="dropdown-item" href="../articles/gps-101-core-workflow.html">GPS 101: Core Workflow</a></li>
-    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: Activity Classification and Validation</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: GMM Activity Classification and Validation</a></li>
   </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><a class="external-link nav-link" href="https://github.com/wobblytwilliams/grazer" aria-label="GitHub repository"><span class="fa fa-github"></span></a></li>
       </ul></div>
@@ -102,24 +102,10 @@
 
         <dt>
 
-          <code><a href="grz_classify_activity_consensus.html">grz_classify_activity_consensus()</a></code>
+          <code><a href="grz_classify_activity_gmm.html">grz_classify_activity_gmm()</a></code>
 
         </dt>
-        <dd>Combine HMM and Spatial Activity Classifications</dd>
-
-        <dt>
-
-          <code><a href="grz_classify_activity_hmm.html">grz_classify_activity_hmm()</a></code>
-
-        </dt>
-        <dd>Classify Active/Inactive States Using HMM</dd>
-
-        <dt>
-
-          <code><a href="grz_classify_activity_spatial.html">grz_classify_activity_spatial()</a></code>
-
-        </dt>
-        <dd>Classify Active/Inactive States Using Spatial Clustering</dd>
+        <dd>Classify Active/Inactive States Using GMM</dd>
 
         <dt>
 
@@ -175,7 +161,7 @@
           <code><a href="grz_denoise.html">grz_denoise()</a></code>
 
         </dt>
-        <dd>Denoise static GPS jitter</dd>
+        <dd>Denoise GPS jitter using statistical or state-aware smoothing</dd>
 
         <dt>
 

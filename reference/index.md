@@ -18,12 +18,8 @@
   : Calculate row-level social metrics
 - [`grz_calculate_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_spatial.md)
   : Calculate spatial/home-range metrics by epoch
-- [`grz_classify_activity_consensus()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.md)
-  : Combine HMM and Spatial Activity Classifications
-- [`grz_classify_activity_hmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_hmm.md)
-  : Classify Active/Inactive States Using HMM
-- [`grz_classify_activity_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_spatial.md)
-  : Classify Active/Inactive States Using Spatial Clustering
+- [`grz_classify_activity_gmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_gmm.md)
+  : Classify Active/Inactive States Using GMM
 - [`grz_classify_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_behavior.md)
   : Classify behavior states from movement metrics
 - [`grz_clean()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean.md)
@@ -39,7 +35,7 @@
 - [`grz_clean_speed_stat()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_stat.md)
   : Clean speed outliers using data-driven threshold
 - [`grz_denoise()`](https://wobblytwilliams.github.io/grazer/reference/grz_denoise.md)
-  : Denoise static GPS jitter
+  : Denoise GPS jitter using statistical or state-aware smoothing
 - [`grz_downsample()`](https://wobblytwilliams.github.io/grazer/reference/grz_downsample.md)
   : Downsample to lower frequency
 - [`grz_label_gps_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_label_gps_states.md)

@@ -42,7 +42,7 @@
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tutorials</h6></li>
     <li><a class="dropdown-item" href="../articles/gps-101-core-workflow.html">GPS 101: Core Workflow</a></li>
-    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: Activity Classification and Validation</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: GMM Activity Classification and Validation</a></li>
   </ul>
 </li>
       </ul>
@@ -285,20 +285,20 @@ periods.</li>
 <span><span class="co">#&gt; [clean_errors] dropped: 2 | rows: 1,296 -&gt; 1,294</span></span>
 <span><span class="co">#&gt; [clean_speed_fixed] threshold=4.000 m/s</span></span>
 <span><span class="co">#&gt; [clean_speed_fixed] dropped: 0 | rows: 1,294 -&gt; 1,294</span></span>
-<span><span class="co">#&gt; [denoise] radius_m=8.0 max_gap_mins=20.0</span></span>
-<span><span class="co">#&gt; [denoise] dropped: 108 | rows: 1,294 -&gt; 1,186</span></span>
-<span><span class="co">#&gt; [clean] final_rows=1,186</span></span>
+<span><span class="co">#&gt; [denoise] method=statistical</span></span>
+<span><span class="co">#&gt; [denoise] dropped: 0 | rows: 1,294 -&gt; 1,294</span></span>
+<span><span class="co">#&gt; [clean] final_rows=1,294</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">gps_clean</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 1186</span></span>
+<span><span class="co">#&gt; [1] 1294</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">gps_clean</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   sensor_id            datetime      lon       lat</span></span>
-<span><span class="co">#&gt; 1       A01 2024-05-01 00:00:00 132.3049 -14.47395</span></span>
-<span><span class="co">#&gt; 2       A01 2024-05-01 00:10:00 132.3050 -14.47391</span></span>
-<span><span class="co">#&gt; 3       A01 2024-05-01 00:20:00 132.3049 -14.47379</span></span>
-<span><span class="co">#&gt; 4       A01 2024-05-01 00:30:00 132.3050 -14.47394</span></span>
-<span><span class="co">#&gt; 5       A01 2024-05-01 00:40:00 132.3050 -14.47372</span></span>
-<span><span class="co">#&gt; 6       A01 2024-05-01 00:50:00 132.3052 -14.47383</span></span></code></pre></div>
+<span><span class="co">#&gt;   sensor_id            datetime      lon       lat  lon_raw   lat_raw</span></span>
+<span><span class="co">#&gt; 1       A01 2024-05-01 00:00:00 132.3050 -14.47393 132.3049 -14.47395</span></span>
+<span><span class="co">#&gt; 2       A01 2024-05-01 00:10:00 132.3050 -14.47390 132.3050 -14.47391</span></span>
+<span><span class="co">#&gt; 3       A01 2024-05-01 00:20:00 132.3050 -14.47387 132.3049 -14.47379</span></span>
+<span><span class="co">#&gt; 4       A01 2024-05-01 00:30:00 132.3050 -14.47385 132.3050 -14.47394</span></span>
+<span><span class="co">#&gt; 5       A01 2024-05-01 00:40:00 132.3051 -14.47382 132.3050 -14.47372</span></span>
+<span><span class="co">#&gt; 6       A01 2024-05-01 00:50:00 132.3052 -14.47379 132.3052 -14.47383</span></span></code></pre></div>
 <p>How this works in practice:</p>
 <ul>
 <li>Cleaning is intentionally drop-based and ordered.</li>
@@ -327,20 +327,20 @@ Check: compare pre/post row counts by animal and day.</li>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">datetime</span>, <span class="va">step_m</span>, <span class="va">speed_mps</span>, <span class="va">turn_rad</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">movement_view</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 1,186 × 5</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 1,294 × 5</span></span></span>
 <span><span class="co">#&gt;    sensor_id datetime            step_m speed_mps turn_rad</span></span>
 <span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>               <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-05-01 <span style="color: #949494;">00:00:00</span>   <span style="color: #BB0000;">NA</span>     <span style="color: #BB0000;">NA</span>        <span style="color: #BB0000;">NA</span>    </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-05-01 <span style="color: #949494;">00:10:00</span>   11.5    0.019<span style="text-decoration: underline;">2</span>   <span style="color: #BB0000;">NA</span>    </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-05-01 <span style="color: #949494;">00:20:00</span>   18.1    0.030<span style="text-decoration: underline;">2</span>    2.00 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-05-01 <span style="color: #949494;">00:30:00</span>   17.1    0.028<span style="text-decoration: underline;">4</span>    2.58 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-05-01 <span style="color: #949494;">00:40:00</span>   25.5    0.042<span style="text-decoration: underline;">5</span>    2.66 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-05-01 <span style="color: #949494;">00:50:00</span>   25.8    0.043<span style="text-decoration: underline;">0</span>    1.82 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-05-01 <span style="color: #949494;">01:00:00</span>   12.1    0.020<span style="text-decoration: underline;">2</span>    0.623</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-05-01 <span style="color: #949494;">01:20:00</span>   19.8    0.016<span style="text-decoration: underline;">5</span>    0.532</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-05-01 <span style="color: #949494;">01:40:00</span>   12.3    0.010<span style="text-decoration: underline;">3</span>    1.74 </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-05-01 <span style="color: #949494;">01:50:00</span>   15.6    0.025<span style="text-decoration: underline;">9</span>    2.21 </span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1,176 more rows</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-05-01 <span style="color: #949494;">00:00:00</span>  <span style="color: #BB0000;">NA</span>     <span style="color: #BB0000;">NA</span>        <span style="color: #BB0000;">NA</span>     </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-05-01 <span style="color: #949494;">00:10:00</span>   4.31   0.007<span style="text-decoration: underline;">18</span>  <span style="color: #BB0000;">NA</span>     </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-05-01 <span style="color: #949494;">00:20:00</span>   2.80   0.004<span style="text-decoration: underline;">66</span>   0.166 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-05-01 <span style="color: #949494;">00:30:00</span>   4.18   0.006<span style="text-decoration: underline;">97</span>   0.739 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-05-01 <span style="color: #949494;">00:40:00</span>   8.44   0.014<span style="text-decoration: underline;">1</span>    0.253 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-05-01 <span style="color: #949494;">00:50:00</span>  11.3    0.018<span style="text-decoration: underline;">9</span>    0.093<span style="text-decoration: underline;">3</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-05-01 <span style="color: #949494;">01:00:00</span>  12.0    0.020<span style="text-decoration: underline;">0</span>    0.090<span style="text-decoration: underline;">3</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-05-01 <span style="color: #949494;">01:10:00</span>  10.5    0.017<span style="text-decoration: underline;">4</span>    0.147 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-05-01 <span style="color: #949494;">01:20:00</span>   7.59   0.012<span style="text-decoration: underline;">7</span>    0.281 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-05-01 <span style="color: #949494;">01:30:00</span>   5.00   0.008<span style="text-decoration: underline;">34</span>   0.272 </span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1,284 more rows</span></span></span>
 <span></span>
 <span><span class="va">movement_more</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://generics.r-lib.org/reference/setops.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gps_movement</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">movement_view</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span></span>
@@ -351,7 +351,7 @@ Check: compare pre/post row counts by animal and day.</li>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">movement_more</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">10</span><span class="op">)</span> <span class="st">", ..."</span> <span class="kw">else</span> <span class="st">""</span>,</span>
 <span>  <span class="st">"\n"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt; i 6 more columns: lon, lat, step_dt_s, bearing_deg, cum_distance_m, net_displacement_m</span></span></code></pre></div>
+<span><span class="co">#&gt; i 8 more columns: lon, lat, lon_raw, lat_raw, step_dt_s, bearing_deg, cum_distance_m, net_displacement_m</span></span></code></pre></div>
 <p>Key movement variables:</p>
 <ul>
 <li>
@@ -445,20 +445,20 @@ metrics.</li>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">datetime</span>, <span class="va">nearest_neighbor_m</span>, <span class="va">n_within_30m</span>, <span class="va">mean_dist_to_others_m</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">social_view</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 1,186 × 5</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 1,294 × 5</span></span></span>
 <span><span class="co">#&gt;    sensor_id datetime            nearest_neighbor_m n_within_30m</span></span>
 <span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                           <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-05-01 <span style="color: #949494;">00:00:00</span>               706.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-05-01 <span style="color: #949494;">00:10:00</span>               711.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-05-01 <span style="color: #949494;">00:20:00</span>               711.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-05-01 <span style="color: #949494;">00:30:00</span>               708.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-05-01 <span style="color: #949494;">00:40:00</span>               698.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-05-01 <span style="color: #949494;">00:50:00</span>               672.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-05-01 <span style="color: #949494;">01:00:00</span>               947.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-05-01 <span style="color: #949494;">01:20:00</span>               678.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-05-01 <span style="color: #949494;">01:40:00</span>               736.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-05-01 <span style="color: #949494;">01:50:00</span>               959.            0</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1,176 more rows</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> A01       2024-05-01 <span style="color: #949494;">00:00:00</span>               709.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> A01       2024-05-01 <span style="color: #949494;">00:10:00</span>               710.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> A01       2024-05-01 <span style="color: #949494;">00:20:00</span>               708.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> A01       2024-05-01 <span style="color: #949494;">00:30:00</span>               703.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> A01       2024-05-01 <span style="color: #949494;">00:40:00</span>               694.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> A01       2024-05-01 <span style="color: #949494;">00:50:00</span>               684.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> A01       2024-05-01 <span style="color: #949494;">01:00:00</span>               677.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> A01       2024-05-01 <span style="color: #949494;">01:10:00</span>               677.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> A01       2024-05-01 <span style="color: #949494;">01:20:00</span>               684.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> A01       2024-05-01 <span style="color: #949494;">01:30:00</span>               698.            0</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1,284 more rows</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: mean_dist_to_others_m &lt;dbl&gt;</span></span></span>
 <span></span>
 <span><span class="va">social_more</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://generics.r-lib.org/reference/setops.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gps_social</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">social_view</span><span class="op">)</span><span class="op">)</span></span>
@@ -470,7 +470,7 @@ metrics.</li>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">social_more</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">10</span><span class="op">)</span> <span class="st">", ..."</span> <span class="kw">else</span> <span class="st">""</span>,</span>
 <span>  <span class="st">"\n"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt; i 15 more columns: lon, lat, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m, net_displacement_m, social_group_size , ...</span></span></code></pre></div>
+<span><span class="co">#&gt; i 17 more columns: lon, lat, lon_raw, lat_raw, step_dt_s, step_m, speed_mps, bearing_deg, turn_rad, cum_distance_m , ...</span></span></code></pre></div>
 <p>Key social variables:</p>
 <ul>
 <li>
@@ -512,9 +512,7 @@ interpretation.</li>
 <span>    y <span class="op">=</span> <span class="st">"Density"</span>,</span>
 <span>    fill <span class="op">=</span> <span class="st">"Sensor ID"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Warning: Removed 6 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">#&gt; (`stat_density()`).</span></span></code></pre></div>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_social_tbl</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -552,15 +550,15 @@ interpretation.</li>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 9 × 5</span></span></span>
 <span><span class="co">#&gt;   sensor_id epoch      total_distance_m mean_nn_m mcp95_area_ha</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                 <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> A01       2024-05-01            <span style="text-decoration: underline;">3</span>133.      792.          4.32</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> A01       2024-05-02            <span style="text-decoration: underline;">2</span>651.      871.          5.32</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> A01       2024-05-03            <span style="text-decoration: underline;">3</span>244.      814.          4.91</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> A02       2024-05-01            <span style="text-decoration: underline;">3</span>455.      782.          6.01</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> A02       2024-05-02            <span style="text-decoration: underline;">3</span>369.      802.          8.08</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> A02       2024-05-03            <span style="text-decoration: underline;">3</span>460.      776.          4.36</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> A03       2024-05-01            <span style="text-decoration: underline;">3</span>370.     <span style="text-decoration: underline;">1</span>050.          6.63</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span> A03       2024-05-02            <span style="text-decoration: underline;">2</span>989.      980.          6.35</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">9</span> A03       2024-05-03            <span style="text-decoration: underline;">3</span>059.     <span style="text-decoration: underline;">1</span>697.          8.54</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> A01       2024-05-01            <span style="text-decoration: underline;">1</span>611.      751.          3.89</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> A01       2024-05-02            <span style="text-decoration: underline;">1</span>358.      850.          4.39</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> A01       2024-05-03            <span style="text-decoration: underline;">1</span>487.      718.          3.66</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> A02       2024-05-01            <span style="text-decoration: underline;">1</span>469.      759.          5.04</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> A02       2024-05-02            <span style="text-decoration: underline;">1</span>637.      781.          6.97</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> A02       2024-05-03            <span style="text-decoration: underline;">1</span>523.      718.          3.54</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> A03       2024-05-01            <span style="text-decoration: underline;">1</span>358.     <span style="text-decoration: underline;">1</span>018.          4.78</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span> A03       2024-05-02            <span style="text-decoration: underline;">1</span>513.      964.          5.43</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">9</span> A03       2024-05-03            <span style="text-decoration: underline;">1</span>277.     <span style="text-decoration: underline;">1</span>653.          6.73</span></span>
 <span></span>
 <span><span class="va">summary_more</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://generics.r-lib.org/reference/setops.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">daily_metrics</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">summary_view</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span></span>

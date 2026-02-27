@@ -14,9 +14,7 @@
 <url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_calculate_movement.html</loc></url>
 <url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_calculate_social.html</loc></url>
 <url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_calculate_spatial.html</loc></url>
-<url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.html</loc></url>
-<url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_hmm.html</loc></url>
-<url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_spatial.html</loc></url>
+<url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_gmm.html</loc></url>
 <url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_classify_behavior.html</loc></url>
 <url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_clean.html</loc></url>
 <url><loc>https://wobblytwilliams.github.io/grazer/reference/grz_clean_duplicates.html</loc></url>
