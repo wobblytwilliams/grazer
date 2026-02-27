@@ -70,36 +70,17 @@ gps <- dplyr::rename(
 
 gps <- grz_validate(gps, drop_invalid = TRUE)
 
-# 2) Quick playback inspection (after validate)
-m_preview <- grz_playback_gps(
-  data = gps,
-  group = "sensor_id",
-  align = TRUE,
-  align_interval_mins = "base",
-  tail_points = 20,
-  show_points = TRUE,
-  point_size_slider = TRUE,
-  warnings = FALSE,
-  progress = FALSE
-)
-print(m_preview)
 
-# 3) Clean
+# 3) Clean (wrapper style)
 gps_clean <- grz_clean(
   gps,
   steps = c("duplicates", "errors", "speed_fixed", "denoise"),
   max_speed_mps = 4
 )
 
-# 4) Row-level metrics
+# 3) Row-level metrics (wrapper style)
 gps_move <- grz_calculate_movement(gps_clean)
 gps_social <- grz_calculate_social(gps_clean)
-gps_states <- grz_classify_activity_gmm(
-  gps_clean,
-  groups = "sensor_id",
-  smoothing = "hmm",
-  hmm_self_transition = 0.98
-)
 
 # 5) Epoch summaries
 daily_metrics <- grz_calculate_epoch_metrics(gps_clean, epoch = "day")
@@ -109,7 +90,7 @@ head(daily_metrics)
 
 ## Main Function Groups
 
-`grazer` functions follow a typical telemetry workflow: validate inputs -> clean tracks -> derive metrics -> summarise patterns -> interpret behaviour.
+`grazer` functions follow a typical telemetry workflow: validate inputs -> clean tracks -> derive metrics -> summarise patterns. The outputs should be ready to be described through your chosen statistical inference method, or leveraged in predictive analysis.
 
 ### Ingest & validation
 
@@ -117,7 +98,6 @@ head(daily_metrics)
 |----------|---------|
 | `grz_validate()` | Checks required fields, timestamps, coordinate validity, and record ordering. |
 | `grz_validate_gps()` | Performs GPS-specific checks (missing fixes, impossible coordinates, duplicates, irregular sampling). |
-
 
 ---
 
