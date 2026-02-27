@@ -76,15 +76,15 @@ a:hover {
   display: none !important;
 }
 
-.navbar-collapse {
+.navbar .navbar-collapse {
   align-items: center;
 }
 
-.navbar-nav {
+.navbar .navbar-nav {
   align-items: center;
 }
 
-.nav-link {
+.navbar .nav-link {
   display: flex;
   align-items: center;
   min-height: 40px;
