@@ -42,6 +42,8 @@
   : Label GPS States in an Interactive Leaflet Timeline App
 - [`grz_map()`](https://wobblytwilliams.github.io/grazer/reference/grz_map.md)
   : Plot Cattle GPS Fixes on an Interactive Leaflet Map
+- [`grz_playback_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_playback_gps.md)
+  : Playback GPS tracks on a leaflet timeline with tails
 - [`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)
   : Plot diurnal heatmaps for key movement metrics
 - [`grz_plot_diurnal_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_states.md)

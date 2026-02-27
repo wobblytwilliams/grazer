@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>GPS 201: GMM Activity Classification and Validation • grazer</title>
+<title>GPS 103: GMM Activity Classification and Validation • grazer</title>
 <!-- favicons --><link rel="icon" type="image/png" sizes="96x96" href="../favicon-96x96.png">
 <link rel="icon" type="”image/svg+xml”" href="../favicon.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
@@ -16,7 +16,7 @@
 <script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<meta property="og:title" content="GPS 201: GMM Activity Classification and Validation">
+<meta property="og:title" content="GPS 103: GMM Activity Classification and Validation">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -42,7 +42,8 @@
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tutorials</h6></li>
     <li><a class="dropdown-item" href="../articles/gps-101-core-workflow.html">GPS 101: Core Workflow</a></li>
-    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: GMM Activity Classification and Validation</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-102-playback-gps.html">GPS 102: Interactive Playback with grz_playback_gps()</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-103-activity-and-validation.html">GPS 103: GMM Activity Classification and Validation</a></li>
   </ul>
 </li>
       </ul>
@@ -60,11 +61,11 @@
 
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
-      <img src="../logo.png" class="logo" alt=""><h1>GPS 201: GMM Activity Classification and Validation</h1>
+      <img src="../logo.png" class="logo" alt=""><h1>GPS 103: GMM Activity Classification and Validation</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/wobblytwilliams/grazer/blob/main/vignettes/gps-201-activity-and-validation.Rmd" class="external-link"><code>vignettes/gps-201-activity-and-validation.Rmd</code></a></small>
-      <div class="d-none name"><code>gps-201-activity-and-validation.Rmd</code></div>
+      <small class="dont-index">Source: <a href="https://github.com/wobblytwilliams/grazer/blob/main/vignettes/gps-103-activity-and-validation.Rmd" class="external-link"><code>vignettes/gps-103-activity-and-validation.Rmd</code></a></small>
+      <div class="d-none name"><code>gps-103-activity-and-validation.Rmd</code></div>
     </div>
 
     
@@ -255,7 +256,7 @@ Check: inspect class proportions by day and animal.</li>
 <span>    color <span class="op">=</span> <span class="st">"State"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-5-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-103-activity-and-validation_files/figure-html/unnamed-chunk-5-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/grz_plot_diurnal_states.html">grz_plot_diurnal_states</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps_states</span>,</span>
@@ -263,7 +264,7 @@ Check: inspect class proportions by day and animal.</li>
 <span>  group_col <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
 <span>  plot_type <span class="op">=</span> <span class="st">"line"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-103-activity-and-validation_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_states</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -284,7 +285,7 @@ Check: inspect class proportions by day and animal.</li>
 <span>    fill <span class="op">=</span> <span class="st">"State"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-103-activity-and-validation_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="add-manual-labels-interactive-app">4) Add manual labels (interactive app)<a class="anchor" aria-label="anchor" href="#add-manual-labels-interactive-app"></a>
@@ -477,7 +478,7 @@ final choices.</li>
 <span>    fill <span class="op">=</span> <span class="st">"Accuracy (%)"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-12-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-103-activity-and-validation_files/figure-html/unnamed-chunk-12-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">best</span> <span class="op">&lt;-</span> <span class="va">top3</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span></span>
@@ -512,7 +513,7 @@ final choices.</li>
 <span>    fill <span class="op">=</span> <span class="st">"Count"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-201-activity-and-validation_files/figure-html/unnamed-chunk-13-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-103-activity-and-validation_files/figure-html/unnamed-chunk-13-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="optional-advanced-diagnostics">7) Optional advanced diagnostics<a class="anchor" aria-label="anchor" href="#optional-advanced-diagnostics"></a>
@@ -565,7 +566,7 @@ speech recognition</em>.<br><em>Proceedings of the IEEE</em>, 77(2), 257-286.</l
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Grazer Maintainer.</p>
+  <p>Developed by Dr Thomas Williams.</p>
 </div>
 
 <div class="pkgdown-footer-right">

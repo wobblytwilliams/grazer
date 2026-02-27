@@ -45,7 +45,8 @@
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tutorials</h6></li>
     <li><a class="dropdown-item" href="articles/gps-101-core-workflow.html">GPS 101: Core Workflow</a></li>
-    <li><a class="dropdown-item" href="articles/gps-201-activity-and-validation.html">GPS 201: GMM Activity Classification and Validation</a></li>
+    <li><a class="dropdown-item" href="articles/gps-102-playback-gps.html">GPS 102: Interactive Playback with grz_playback_gps()</a></li>
+    <li><a class="dropdown-item" href="articles/gps-103-activity-and-validation.html">GPS 103: GMM Activity Classification and Validation</a></li>
   </ul>
 </li>
       </ul>
@@ -67,6 +68,7 @@
 <p>The package also includes quick interactive mapping and tools for visually annotating GPS data, supporting the creation of labelled datasets for behavioural interpretation.</p>
 <p>Outputs are analysis-ready datasets and summaries suitable for visualisation, statistical analysis, and inclusion in scientific publications. <code>grazer</code> is not intended to cover every telemetry workflow; rather, it supports scientists entering the precision livestock research space by providing a practical and reproducible starting point.</p>
 <p>For tutorials and updates visit: <a href="https://wobblytwilliams.github.io/grazer/" class="uri">https://wobblytwilliams.github.io/grazer/</a></p>
+<p>Maintainer: Dr Thomas Williams (<a href="mailto:t.m.williams@cqu.edu.au" class="email">t.m.williams@cqu.edu.au</a>)</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -154,24 +156,19 @@
 <span></span>
 <span><span class="va">gps</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_validate.html">grz_validate</a></span><span class="op">(</span><span class="va">gps</span>, drop_invalid <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># 2) Clean</span></span>
+<span></span>
+<span><span class="co"># 3) Clean (wrapper style)</span></span>
 <span><span class="va">gps_clean</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_clean.html">grz_clean</a></span><span class="op">(</span></span>
 <span>  <span class="va">gps</span>,</span>
 <span>  steps <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"duplicates"</span>, <span class="st">"errors"</span>, <span class="st">"speed_fixed"</span>, <span class="st">"denoise"</span><span class="op">)</span>,</span>
 <span>  max_speed_mps <span class="op">=</span> <span class="fl">4</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># 3) Row-level metrics</span></span>
+<span><span class="co"># 3) Row-level metrics (wrapper style)</span></span>
 <span><span class="va">gps_move</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_calculate_movement.html">grz_calculate_movement</a></span><span class="op">(</span><span class="va">gps_clean</span><span class="op">)</span></span>
 <span><span class="va">gps_social</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_calculate_social.html">grz_calculate_social</a></span><span class="op">(</span><span class="va">gps_clean</span><span class="op">)</span></span>
-<span><span class="va">gps_states</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_classify_activity_gmm.html">grz_classify_activity_gmm</a></span><span class="op">(</span></span>
-<span>  <span class="va">gps_clean</span>,</span>
-<span>  groups <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
-<span>  smoothing <span class="op">=</span> <span class="st">"hmm"</span>,</span>
-<span>  hmm_self_transition <span class="op">=</span> <span class="fl">0.98</span></span>
-<span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># 4) Epoch summaries</span></span>
+<span><span class="co"># 5) Epoch summaries</span></span>
 <span><span class="va">daily_metrics</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_calculate_epoch_metrics.html">grz_calculate_epoch_metrics</a></span><span class="op">(</span><span class="va">gps_clean</span>, epoch <span class="op">=</span> <span class="st">"day"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">daily_metrics</span><span class="op">)</span></span></code></pre></div>
@@ -179,7 +176,7 @@
 <div class="section level2">
 <h2 id="main-function-groups">Main Function Groups<a class="anchor" aria-label="anchor" href="#main-function-groups"></a>
 </h2>
-<p><code>grazer</code> functions follow a typical telemetry workflow: validate inputs -&gt; clean tracks -&gt; derive metrics -&gt; summarise patterns -&gt; interpret behaviour.</p>
+<p><code>grazer</code> functions follow a typical telemetry workflow: validate inputs -&gt; clean tracks -&gt; derive metrics -&gt; summarise patterns. The outputs should be ready to be described through your chosen statistical inference method, or leveraged in predictive analysis.</p>
 <div class="section level3">
 <h3 id="ingest--validation">Ingest &amp; validation<a class="anchor" aria-label="anchor" href="#ingest--validation"></a>
 </h3>
@@ -367,7 +364,9 @@
 </h2>
 <ul>
 <li>
-<code><a href="reference/grz_map.html">grz_map()</a></code> for interactive GPS mapping.</li>
+<code><a href="reference/grz_map.html">grz_map()</a></code> for interactive static GPS mapping (low overheads).</li>
+<li>
+<code><a href="reference/grz_playback_gps.html">grz_playback_gps()</a></code> for timeline playback with animated track tails on a leaflet map (high overheads).</li>
 <li>
 <code><a href="reference/grz_label_gps_states.html">grz_label_gps_states()</a></code> for manual <code>ACTIVE</code>/<code>INACTIVE</code> state labelling in a timeline app. For use in the GMM activity-state workflow.</li>
 </ul>
@@ -415,7 +414,7 @@
 <div class="developers">
 <h2 data-toc-skip>Developers</h2>
 <ul class="list-unstyled">
-<li>Grazer Maintainer <br><small class="roles"> Author, maintainer </small>   </li>
+<li>Dr Thomas Williams <br><small class="roles"> Author, maintainer </small>   </li>
 </ul>
 </div>
 
@@ -426,7 +425,7 @@
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Grazer Maintainer.</p>
+  <p>Developed by Dr Thomas Williams.</p>
 </div>
 
 <div class="pkgdown-footer-right">

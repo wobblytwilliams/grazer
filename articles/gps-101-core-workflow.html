@@ -42,7 +42,8 @@
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tutorials</h6></li>
     <li><a class="dropdown-item" href="../articles/gps-101-core-workflow.html">GPS 101: Core Workflow</a></li>
-    <li><a class="dropdown-item" href="../articles/gps-201-activity-and-validation.html">GPS 201: GMM Activity Classification and Validation</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-102-playback-gps.html">GPS 102: Interactive Playback with grz_playback_gps()</a></li>
+    <li><a class="dropdown-item" href="../articles/gps-103-activity-and-validation.html">GPS 103: GMM Activity Classification and Validation</a></li>
   </ul>
 </li>
       </ul>
@@ -78,6 +79,8 @@ cattle GPS data:</p>
 <li>Start from GPS rows in canonical columns (<code>sensor_id</code>,
 <code>datetime</code>, <code>lon</code>, <code>lat</code>).</li>
 <li>Validate required schema and data types.</li>
+<li>Run an interactive playback check to inspect trajectories over
+time.</li>
 <li>Clean obvious errors and noise.</li>
 <li>Calculate movement, social, and spatial metrics.</li>
 <li>Summarise results to daily metrics for interpretation.</li>
@@ -256,7 +259,60 @@ movement metrics.</li>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="clean-the-gps-rows">4) Clean the GPS rows<a class="anchor" aria-label="anchor" href="#clean-the-gps-rows"></a>
+<h2 id="interactive-playback-quick-look-after-validate">4) Interactive playback quick look (after validate)<a class="anchor" aria-label="anchor" href="#interactive-playback-quick-look-after-validate"></a>
+</h2>
+<p>Before cleaning and feature derivation, it is useful to visually
+inspect the validated trajectories in a timeline map.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="va">playback_pkgs_ok</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">gps_valid_map</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_validate.html">grz_validate</a></span><span class="op">(</span></span>
+<span>    data <span class="op">=</span> <span class="va">gps_raw</span>,</span>
+<span>    drop_invalid <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">playback_map</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_playback_gps.html">grz_playback_gps</a></span><span class="op">(</span></span>
+<span>    data <span class="op">=</span> <span class="va">gps_valid_map</span>,</span>
+<span>    group <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
+<span>    align <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    align_interval_mins <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>    tail_points <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>    show_points <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    point_size_slider <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    point_size_min <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>    point_size_max <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>    playback_steps <span class="op">=</span> <span class="fl">800</span>,</span>
+<span>    playback_duration_ms <span class="op">=</span> <span class="fl">18000</span>,</span>
+<span>    popup_fields <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sensor_id"</span>, <span class="st">"datetime"</span><span class="op">)</span>,</span>
+<span>    warnings <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>    progress <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>    show_loading_overlay <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  <span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">playback_map</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span></span>
+<span>    <span class="st">"Playback widget skipped because required packages are not available: "</span>,</span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">playback_pkgs</span>, collapse <span class="op">=</span> <span class="st">", "</span><span class="op">)</span>,</span>
+<span>    <span class="st">".\n"</span>,</span>
+<span>    sep <span class="op">=</span> <span class="st">""</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="cn">NULL</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; Playback widget skipped because required packages are not available: leaflet, leaftime, htmlwidgets.</span></span>
+<span><span class="co">#&gt; NULL</span></span></code></pre></div>
+<p>How this works in practice:</p>
+<ul>
+<li>Playback gives an immediate quality check for track continuity and
+obvious artefacts.</li>
+<li>The timeline control helps inspect movement over time before
+committing to cleaning settings.</li>
+<li>Point-size slider makes sparse and dense periods easier to
+inspect.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="clean-the-gps-rows">5) Clean the GPS rows<a class="anchor" aria-label="anchor" href="#clean-the-gps-rows"></a>
 </h2>
 <p>This run applies four common cleaning steps:</p>
 <ul>
@@ -272,7 +328,7 @@ moves.</li>
 <code>denoise</code>: reduces local GPS bounce in static
 periods.</li>
 </ul>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_clean</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_clean.html">grz_clean</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps_valid</span>,</span>
 <span>  steps <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"duplicates"</span>, <span class="st">"errors"</span>, <span class="st">"speed_fixed"</span>, <span class="st">"denoise"</span><span class="op">)</span>,</span>
@@ -317,9 +373,9 @@ Check: compare pre/post row counts by animal and day.</li>
 </ul>
 </div>
 <div class="section level2">
-<h2 id="calculate-movement-metrics-row-level">5) Calculate movement metrics (row-level)<a class="anchor" aria-label="anchor" href="#calculate-movement-metrics-row-level"></a>
+<h2 id="calculate-movement-metrics-row-level">6) Calculate movement metrics (row-level)<a class="anchor" aria-label="anchor" href="#calculate-movement-metrics-row-level"></a>
 </h2>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_movement</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_calculate_movement.html">grz_calculate_movement</a></span><span class="op">(</span><span class="va">gps_clean</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">movement_view</span> <span class="op">&lt;-</span> <span class="va">gps_movement</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -384,7 +440,7 @@ Check: inspect <code>step_dt_s</code> distribution.</li>
 Check: expect <code>NA</code> in first row of each group for lag-derived
 metrics.</li>
 </ul>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_movement</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">step_m</span>, fill <span class="op">=</span> <span class="va">sensor_id</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
@@ -398,8 +454,8 @@ metrics.</li>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Warning: Removed 3 rows containing non-finite outside the scale range</span></span>
 <span><span class="co">#&gt; (`stat_bin()`).</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="768"></p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-9-1.png" class="r-plt" alt="" width="768"></p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_movement</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>hour <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="va">datetime</span>, <span class="st">"%H"</span>, tz <span class="op">=</span> <span class="st">"UTC"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -419,12 +475,12 @@ metrics.</li>
 <span><span class="co">#&gt; (`stat_smooth()`).</span></span>
 <span><span class="co">#&gt; Warning: Removed 3 rows containing missing values or values outside the scale range</span></span>
 <span><span class="co">#&gt; (`geom_point()`).</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-9-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-10-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
-<h2 id="calculate-social-metrics-row-level">6) Calculate social metrics (row-level)<a class="anchor" aria-label="anchor" href="#calculate-social-metrics-row-level"></a>
+<h2 id="calculate-social-metrics-row-level">7) Calculate social metrics (row-level)<a class="anchor" aria-label="anchor" href="#calculate-social-metrics-row-level"></a>
 </h2>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_social</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_calculate_social.html">grz_calculate_social</a></span><span class="op">(</span></span>
 <span>  <span class="va">gps_movement</span>,</span>
 <span>  thresholds_m <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">30</span>, <span class="fl">50</span>, <span class="fl">100</span><span class="op">)</span>,</span>
@@ -502,7 +558,7 @@ sizes.<br>
 Check: inspect <code>social_group_size</code> before
 interpretation.</li>
 </ul>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_social_tbl</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">nearest_neighbor_m</span>, fill <span class="op">=</span> <span class="va">sensor_id</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_density.html" class="external-link">geom_density</a></span><span class="op">(</span>alpha <span class="op">=</span> <span class="fl">0.35</span><span class="op">)</span> <span class="op">+</span></span>
@@ -513,8 +569,8 @@ interpretation.</li>
 <span>    fill <span class="op">=</span> <span class="st">"Sensor ID"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="768"></p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-12-1.png" class="r-plt" alt="" width="768"></p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gps_social_tbl</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>day <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="va">datetime</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html" class="external-link">group_by</a></span><span class="op">(</span><span class="va">sensor_id</span>, <span class="va">day</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -529,12 +585,12 @@ interpretation.</li>
 <span>    color <span class="op">=</span> <span class="st">"Sensor ID"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-12-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-13-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
-<h2 id="summarise-to-day-level-movement-social-and-spatial-outputs">7) Summarise to day-level movement, social, and spatial outputs<a class="anchor" aria-label="anchor" href="#summarise-to-day-level-movement-social-and-spatial-outputs"></a>
+<h2 id="summarise-to-day-level-movement-social-and-spatial-outputs">8) Summarise to day-level movement, social, and spatial outputs<a class="anchor" aria-label="anchor" href="#summarise-to-day-level-movement-social-and-spatial-outputs"></a>
 </h2>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">daily_metrics</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grz_calculate_epoch_metrics.html">grz_calculate_epoch_metrics</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps_social</span>,</span>
 <span>  epoch <span class="op">=</span> <span class="st">"day"</span>,</span>
@@ -599,7 +655,7 @@ Check: screen by <code>n_fixes</code> before comparing
 Check: facet/stratify by paddock, cohort, or treatment when
 available.</li>
 </ul>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">daily_metrics</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>epoch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="va">epoch</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -613,8 +669,8 @@ available.</li>
 <span>    color <span class="op">=</span> <span class="st">"Sensor ID"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-14-1.png" class="r-plt" alt="" width="768"></p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png" class="r-plt" alt="" width="768"></p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">daily_metrics</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://tibble.tidyverse.org/reference/as_tibble.html" class="external-link">as_tibble</a></span><span class="op">(</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>epoch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="va">epoch</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
@@ -628,10 +684,10 @@ available.</li>
 <span>    color <span class="op">=</span> <span class="st">"Sensor ID"</span></span>
 <span>  <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-16-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
-<h2 id="diurnal-feature-plots">8) Diurnal feature plots<a class="anchor" aria-label="anchor" href="#diurnal-feature-plots"></a>
+<h2 id="diurnal-feature-plots">9) Diurnal feature plots<a class="anchor" aria-label="anchor" href="#diurnal-feature-plots"></a>
 </h2>
 <p><code><a href="../reference/grz_plot_diurnal_metrics.html">grz_plot_diurnal_metrics()</a></code> gives an interpretable view
 of how movement features vary by hour-of-day.</p>
@@ -647,7 +703,7 @@ setting.</li>
 interpretation.<br>
 Check: set and verify timezone assumptions before diurnal plotting.</li>
 </ul>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/grz_plot_diurnal_metrics.html">grz_plot_diurnal_metrics</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">gps_social</span>,</span>
 <span>  metrics <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"step_m"</span>, <span class="st">"turn_rad"</span><span class="op">)</span>,</span>
@@ -655,13 +711,15 @@ Check: set and verify timezone assumptions before diurnal plotting.</li>
 <span>  agg_fun <span class="op">=</span> <span class="st">"median"</span>,</span>
 <span>  scale <span class="op">=</span> <span class="st">"none"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-16-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="gps-101-core-workflow_files/figure-html/unnamed-chunk-17-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="next-step">Next Step<a class="anchor" aria-label="anchor" href="#next-step"></a>
 </h2>
-<p>Continue to the 201 tutorial for:</p>
+<p>Continue to GPS 102 for interactive playback mapping, then GPS 103
+for:</p>
 <ul>
+<li>timeline playback QA with <code><a href="../reference/grz_playback_gps.html">grz_playback_gps()</a></code>,</li>
 <li>active/inactive classification,</li>
 <li>manual state labelling with
 <code><a href="../reference/grz_label_gps_states.html">grz_label_gps_states()</a></code>,</li>
@@ -689,7 +747,7 @@ Conceptual basis for home-range summaries such as MCP.</li>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Grazer Maintainer.</p>
+  <p>Developed by Dr Thomas Williams.</p>
 </div>
 
 <div class="pkgdown-footer-right">

@@ -19,6 +19,8 @@ starting point.
 For tutorials and updates visit:
 <https://wobblytwilliams.github.io/grazer/>
 
+Maintainer: Dr Thomas Williams (<t.m.williams@cqu.edu.au>)
+
 ## Installation
 
 Install the development version from GitHub:
@@ -95,24 +97,19 @@ gps <- dplyr::rename(
 
 gps <- grz_validate(gps, drop_invalid = TRUE)
 
-# 2) Clean
+
+# 3) Clean (wrapper style)
 gps_clean <- grz_clean(
   gps,
   steps = c("duplicates", "errors", "speed_fixed", "denoise"),
   max_speed_mps = 4
 )
 
-# 3) Row-level metrics
+# 3) Row-level metrics (wrapper style)
 gps_move <- grz_calculate_movement(gps_clean)
 gps_social <- grz_calculate_social(gps_clean)
-gps_states <- grz_classify_activity_gmm(
-  gps_clean,
-  groups = "sensor_id",
-  smoothing = "hmm",
-  hmm_self_transition = 0.98
-)
 
-# 4) Epoch summaries
+# 5) Epoch summaries
 daily_metrics <- grz_calculate_epoch_metrics(gps_clean, epoch = "day")
 
 head(daily_metrics)
@@ -121,8 +118,9 @@ head(daily_metrics)
 ## Main Function Groups
 
 `grazer` functions follow a typical telemetry workflow: validate inputs
--\> clean tracks -\> derive metrics -\> summarise patterns -\> interpret
-behaviour.
+-\> clean tracks -\> derive metrics -\> summarise patterns. The outputs
+should be ready to be described through your chosen statistical
+inference method, or leveraged in predictive analysis.
 
 ### Ingest & validation
 
@@ -187,7 +185,10 @@ behaviour metrics.
 ## Interactive Tools
 
 - [`grz_map()`](https://wobblytwilliams.github.io/grazer/reference/grz_map.md)
-  for interactive GPS mapping.
+  for interactive static GPS mapping (low overheads).
+- [`grz_playback_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_playback_gps.md)
+  for timeline playback with animated track tails on a leaflet map (high
+  overheads).
 - [`grz_label_gps_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_label_gps_states.md)
   for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app. For
   use in the GMM activity-state workflow.

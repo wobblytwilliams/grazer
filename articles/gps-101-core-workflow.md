@@ -8,9 +8,10 @@ data:
 1.  Start from GPS rows in canonical columns (`sensor_id`, `datetime`,
     `lon`, `lat`).
 2.  Validate required schema and data types.
-3.  Clean obvious errors and noise.
-4.  Calculate movement, social, and spatial metrics.
-5.  Summarise results to daily metrics for interpretation.
+3.  Run an interactive playback check to inspect trajectories over time.
+4.  Clean obvious errors and noise.
+5.  Calculate movement, social, and spatial metrics.
+6.  Summarise results to daily metrics for interpretation.
 
 ## Why This Workflow?
 
@@ -174,7 +175,60 @@ Common pitfalls and checks:
   Check: verify `sensor_id` uniqueness and completeness before movement
   metrics.
 
-## 4) Clean the GPS rows
+## 4) Interactive playback quick look (after validate)
+
+Before cleaning and feature derivation, it is useful to visually inspect
+the validated trajectories in a timeline map.
+
+``` r
+if (playback_pkgs_ok) {
+  gps_valid_map <- grz_validate(
+    data = gps_raw,
+    drop_invalid = TRUE,
+    verbose = FALSE
+  )
+
+  playback_map <- grz_playback_gps(
+    data = gps_valid_map,
+    group = "sensor_id",
+    align = TRUE,
+    align_interval_mins = 20,
+    tail_points = 20,
+    show_points = TRUE,
+    point_size_slider = TRUE,
+    point_size_min = 1,
+    point_size_max = 20,
+    playback_steps = 800,
+    playback_duration_ms = 18000,
+    popup_fields = c("sensor_id", "datetime"),
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = TRUE
+  )
+
+  playback_map
+} else {
+  cat(
+    "Playback widget skipped because required packages are not available: ",
+    paste(playback_pkgs, collapse = ", "),
+    ".\n",
+    sep = ""
+  )
+  NULL
+}
+#> Playback widget skipped because required packages are not available: leaflet, leaftime, htmlwidgets.
+#> NULL
+```
+
+How this works in practice:
+
+- Playback gives an immediate quality check for track continuity and
+  obvious artefacts.
+- The timeline control helps inspect movement over time before
+  committing to cleaning settings.
+- Point-size slider makes sparse and dense periods easier to inspect.
+
+## 5) Clean the GPS rows
 
 This run applies four common cleaning steps:
 
@@ -227,7 +281,7 @@ Common pitfalls and checks:
 - Pitfall: aggressive denoising in coarse sampling intervals.  
   Check: compare pre/post row counts by animal and day.
 
-## 5) Calculate movement metrics (row-level)
+## 6) Calculate movement metrics (row-level)
 
 ``` r
 gps_movement <- grz_calculate_movement(gps_clean, verbose = FALSE)
@@ -300,7 +354,7 @@ gps_movement %>%
 #> (`stat_bin()`).
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-8-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-9-1.png)
 
 ``` r
 gps_movement %>%
@@ -324,9 +378,9 @@ gps_movement %>%
 #> (`geom_point()`).
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-9-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-10-1.png)
 
-## 6) Calculate social metrics (row-level)
+## 7) Calculate social metrics (row-level)
 
 ``` r
 gps_social <- grz_calculate_social(
@@ -415,7 +469,7 @@ gps_social_tbl %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-12-1.png)
 
 ``` r
 gps_social_tbl %>%
@@ -434,9 +488,9 @@ gps_social_tbl %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-12-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-13-1.png)
 
-## 7) Summarise to day-level movement, social, and spatial outputs
+## 8) Summarise to day-level movement, social, and spatial outputs
 
 ``` r
 daily_metrics <- grz_calculate_epoch_metrics(
@@ -513,7 +567,7 @@ daily_metrics %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-14-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png)
 
 ``` r
 daily_metrics %>%
@@ -531,9 +585,9 @@ daily_metrics %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-16-1.png)
 
-## 8) Diurnal feature plots
+## 9) Diurnal feature plots
 
 [`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)
 gives an interpretable view of how movement features vary by
@@ -561,12 +615,14 @@ grz_plot_diurnal_metrics(
 )
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-16-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-17-1.png)
 
 ## Next Step
 
-Continue to the 201 tutorial for:
+Continue to GPS 102 for interactive playback mapping, then GPS 103 for:
 
+- timeline playback QA with
+  [`grz_playback_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_playback_gps.md),
 - active/inactive classification,
 - manual state labelling with
   [`grz_label_gps_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_label_gps_states.md),

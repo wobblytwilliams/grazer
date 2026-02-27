@@ -1,4 +1,4 @@
-# GPS 201: GMM Activity Classification and Validation
+# GPS 103: GMM Activity Classification and Validation
 
 ## Overview
 
@@ -174,7 +174,7 @@ gps_states %>%
   theme_minimal()
 ```
 
-![](gps-201-activity-and-validation_files/figure-html/unnamed-chunk-5-1.png)
+![](gps-103-activity-and-validation_files/figure-html/unnamed-chunk-5-1.png)
 
 ``` r
 grz_plot_diurnal_states(
@@ -185,7 +185,7 @@ grz_plot_diurnal_states(
 )
 ```
 
-![](gps-201-activity-and-validation_files/figure-html/unnamed-chunk-6-1.png)
+![](gps-103-activity-and-validation_files/figure-html/unnamed-chunk-6-1.png)
 
 ``` r
 gps_states %>%
@@ -209,7 +209,7 @@ gps_states %>%
   theme_minimal()
 ```
 
-![](gps-201-activity-and-validation_files/figure-html/unnamed-chunk-7-1.png)
+![](gps-103-activity-and-validation_files/figure-html/unnamed-chunk-7-1.png)
 
 ## 4) Add manual labels (interactive app)
 
@@ -403,7 +403,7 @@ results %>%
   theme_minimal()
 ```
 
-![](gps-201-activity-and-validation_files/figure-html/unnamed-chunk-12-1.png)
+![](gps-103-activity-and-validation_files/figure-html/unnamed-chunk-12-1.png)
 
 ``` r
 best <- top3 %>% slice(1)
@@ -441,7 +441,7 @@ confusion_df %>%
   theme_minimal()
 ```
 
-![](gps-201-activity-and-validation_files/figure-html/unnamed-chunk-13-1.png)
+![](gps-103-activity-and-validation_files/figure-html/unnamed-chunk-13-1.png)
 
 ## 7) Optional advanced diagnostics
 
