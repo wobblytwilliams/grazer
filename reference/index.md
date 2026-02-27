@@ -50,10 +50,6 @@
   : Plot diurnal heatmaps for key movement metrics
 - [`grz_plot_diurnal_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_states.md)
   : Plot diurnal state proportions
-- [`grz_read_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_read_gps.md)
-  : Read and standardise GPS file input
-- [`grz_standardise_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_standardise_gps.md)
-  : Standardise GPS column names and core types
 - [`grz_summarise_movement()`](https://wobblytwilliams.github.io/grazer/reference/grz_summarise_movement.md)
   : Summarise row-level movement metrics by epoch
 - [`grz_summarise_social()`](https://wobblytwilliams.github.io/grazer/reference/grz_summarise_social.md)

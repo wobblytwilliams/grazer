@@ -6,6 +6,11 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Ingest, Clean, and Analyze Cattle GPS Data • grazer</title>
+<!-- favicons --><link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="”image/svg+xml”" href="favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" sizes="any" href="favicon.ico">
+<link rel="manifest" href="site.webmanifest">
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
 <script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
@@ -58,25 +63,27 @@
 <img src="logo.png" class="logo" alt=""><h1 id="grazer-">grazer <a class="anchor" aria-label="anchor" href="#grazer-"></a>
 </h1>
 </div>
-<p><code>grazer</code> provides tools to ingest, clean, map, and analyse GPS data from cattle grazing experiments.</p>
-<p>The package is designed around a practical pipeline: data import -&gt; validation -&gt; cleaning -&gt; metric calculation -&gt; behavior interpretation.</p>
-<p>Website (pkgdown): <a href="https://wobblytwilliams.github.io/grazer/" class="uri">https://wobblytwilliams.github.io/grazer/</a></p>
+<p><code>grazer</code> simplifies the process of working with GPS data from livestock grazing systems. It centralises commonly used cleaning methods and metric calculations, providing a consistent workflow for preparing movement, social, and basic spatial summaries.</p>
+<p>The package also includes quick interactive mapping and tools for visually annotating GPS data, supporting the creation of labelled datasets for behavioural interpretation.</p>
+<p>Outputs are analysis-ready datasets and summaries suitable for visualisation, statistical analysis, and inclusion in scientific publications. <code>grazer</code> is not intended to cover every telemetry workflow; rather, it supports scientists entering the precision livestock research space by providing a practical and reproducible starting point.</p>
+<p>For tutorials and updates visit: <a href="https://wobblytwilliams.github.io/grazer/" class="uri">https://wobblytwilliams.github.io/grazer/</a></p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>Install the released version from CRAN (once available):</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># install.packages("grazer")</span></span></code></pre></div>
 <p>Install the development version from GitHub:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"devtools"</span><span class="op">)</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"wobblytwilliams/grazer"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="input-data-requirements">Input Data Requirements<a class="anchor" aria-label="anchor" href="#input-data-requirements"></a>
 </h2>
-<p>Minimum required columns are:</p>
+<p><code>grazer</code> operates on time-ordered GPS observations representing individual animals or devices. To ensure consistent processing and reproducible metrics, the input dataset must contain the following minimum fields:</p>
 <table class="table">
+<colgroup>
+<col width="38%">
+<col width="61%">
+</colgroup>
 <thead><tr class="header">
 <th>Column</th>
 <th>Description</th>
@@ -84,32 +91,67 @@
 <tbody>
 <tr class="odd">
 <td><code>sensor_id</code></td>
-<td>Device or animal identifier</td>
+<td>Unique identifier for the animal, collar, or device. Used to group trajectories and compute individual metrics.</td>
 </tr>
 <tr class="even">
 <td><code>datetime</code></td>
-<td>Timestamp (<code>POSIXct</code> or parseable datetime string)</td>
+<td>Timestamp of the GPS fix. Must be <code>POSIXct</code> or a parseable datetime string.</td>
 </tr>
 <tr class="odd">
 <td><code>lon</code></td>
-<td>Longitude (decimal degrees)</td>
+<td>Longitude in decimal degrees (WGS84).</td>
 </tr>
 <tr class="even">
 <td><code>lat</code></td>
-<td>Latitude (decimal degrees)</td>
+<td>Latitude in decimal degrees (WGS84).</td>
 </tr>
 </tbody>
 </table>
-<p>Additional columns are treated as metadata and retained through the workflow where possible.</p>
+<p>If your source file uses different headings, rename them to these canonical names before calling <code><a href="reference/grz_validate.html">grz_validate()</a></code>.</p>
+<div class="section level3">
+<h3 id="why-these-fields-are-required">Why these fields are required<a class="anchor" aria-label="anchor" href="#why-these-fields-are-required"></a>
+</h3>
+<p>These variables allow <code>grazer</code> to reconstruct movement paths through space and time. From them, the package derives:</p>
+<ul>
+<li>step lengths and speeds<br>
+</li>
+<li>movement persistence and activity patterns<br>
+</li>
+<li>proximity and social interactions<br>
+</li>
+<li>spatial use and utilisation patterns<br>
+</li>
+<li>time-based summaries (hourly, daily, seasonal)</li>
+</ul>
+<p>Using a consistent schema ensures calculations are reproducible across studies and comparable between deployments, properties, and experiments.</p>
+<p>A standardised structure also supports <strong>data sharing and collaboration</strong>, enabling datasets from different projects, institutions, and sensor platforms to be combined without extensive reformatting. This promotes interoperability and reduces preprocessing overhead when integrating multi-site or multi-year studies.</p>
+</div>
+<div class="section level3">
+<h3 id="additional-columns">Additional columns<a class="anchor" aria-label="anchor" href="#additional-columns"></a>
+</h3>
+<p><code>grazer</code> assumes that your dataset contains additional contextual information you may wish to retain, such as paddock, treatment group, herd, collar type, pasture condition, or environmental covariates.</p>
+<p>These fields are treated as metadata and are preserved throughout cleaning, metric calculation, and summarisation steps wherever possible.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="quick-start">Quick Start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
 </h2>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/wobblytwilliams/grazer" class="external-link">grazer</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># 1) Read and validate</span></span>
-<span><span class="va">gps</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_read_gps.html">grz_read_gps</a></span><span class="op">(</span><span class="st">"path/to/gps.csv"</span>, validate <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="co"># 1) Read (outside grazer), then rename to required schema and validate</span></span>
+<span><span class="va">gps_raw</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu">read_csv</span><span class="op">(</span><span class="st">"path/to/gps.csv"</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Required names for grazer are: sensor_id, datetime, lon, lat</span></span>
+<span><span class="co"># Example rename if your source columns are named differently:</span></span>
+<span><span class="va">gps</span> <span class="op">&lt;-</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/rename.html" class="external-link">rename</a></span><span class="op">(</span></span>
+<span>  <span class="va">gps_raw</span>,</span>
+<span>  sensor_id <span class="op">=</span> <span class="va">device_id</span>,</span>
+<span>  datetime <span class="op">=</span> <span class="va">Time</span>,</span>
+<span>  lon <span class="op">=</span> <span class="va">Longitude</span>,</span>
+<span>  lat <span class="op">=</span> <span class="va">Latitude</span></span>
+<span><span class="op">)</span></span>
+<span></span>
 <span><span class="va">gps</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_validate.html">grz_validate</a></span><span class="op">(</span><span class="va">gps</span>, drop_invalid <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># 2) Clean</span></span>
@@ -131,11 +173,200 @@
 <div class="section level2">
 <h2 id="main-function-groups">Main Function Groups<a class="anchor" aria-label="anchor" href="#main-function-groups"></a>
 </h2>
-<p>Ingest and validation: - <code><a href="reference/grz_read_gps.html">grz_read_gps()</a></code> - <code><a href="reference/grz_standardise_gps.html">grz_standardise_gps()</a></code> - <code><a href="reference/grz_validate.html">grz_validate()</a></code> - <code><a href="reference/grz_validate_gps.html">grz_validate_gps()</a></code></p>
-<p>Cleaning: - <code><a href="reference/grz_clean_duplicates.html">grz_clean_duplicates()</a></code> - <code><a href="reference/grz_clean_errors.html">grz_clean_errors()</a></code> - <code><a href="reference/grz_clean_speed_fixed.html">grz_clean_speed_fixed()</a></code> - <code><a href="reference/grz_clean_speed_stat.html">grz_clean_speed_stat()</a></code> - <code><a href="reference/grz_append_paddock_names.html">grz_append_paddock_names()</a></code> - <code><a href="reference/grz_clean_spatial.html">grz_clean_spatial()</a></code> - <code><a href="reference/grz_denoise.html">grz_denoise()</a></code> - <code><a href="reference/grz_clean.html">grz_clean()</a></code></p>
-<p>Row-level metrics: - <code><a href="reference/grz_calculate_movement.html">grz_calculate_movement()</a></code> - <code><a href="reference/grz_calculate_social.html">grz_calculate_social()</a></code></p>
-<p>Epoch-level summaries: - <code><a href="reference/grz_summarise_movement.html">grz_summarise_movement()</a></code> - <code><a href="reference/grz_summarise_social.html">grz_summarise_social()</a></code> - <code><a href="reference/grz_calculate_spatial.html">grz_calculate_spatial()</a></code> - <code><a href="reference/grz_calculate_epoch_metrics.html">grz_calculate_epoch_metrics()</a></code></p>
-<p>Behavior tools: - <code><a href="reference/grz_plot_diurnal_metrics.html">grz_plot_diurnal_metrics()</a></code> - <code><a href="reference/grz_behavior_threshold_guide.html">grz_behavior_threshold_guide()</a></code> - <code><a href="reference/grz_tune_thresholds.html">grz_tune_thresholds()</a></code> - <code><a href="reference/grz_classify_activity_hmm.html">grz_classify_activity_hmm()</a></code> - <code><a href="reference/grz_classify_activity_spatial.html">grz_classify_activity_spatial()</a></code> - <code><a href="reference/grz_classify_activity_consensus.html">grz_classify_activity_consensus()</a></code> - <code><a href="reference/grz_classify_behavior.html">grz_classify_behavior()</a></code> - <code><a href="reference/grz_plot_diurnal_states.html">grz_plot_diurnal_states()</a></code> - <code><a href="reference/grz_validate_behavior.html">grz_validate_behavior()</a></code> - <code><a href="reference/grz_behavior_pipeline.html">grz_behavior_pipeline()</a></code></p>
+</div>
+<div class="section level2">
+<h2 id="main-function-groups-1">Main Function Groups<a class="anchor" aria-label="anchor" href="#main-function-groups-1"></a>
+</h2>
+<p><code>grazer</code> functions follow a typical telemetry workflow: validate inputs → clean tracks → derive metrics → summarise patterns → interpret behaviour.</p>
+<div class="section level3">
+<h3 id="ingest--validation">Ingest &amp; validation<a class="anchor" aria-label="anchor" href="#ingest--validation"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="52%">
+<col width="47%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code><a href="reference/grz_validate.html">grz_validate()</a></code></td>
+<td>Checks required fields, timestamps, coordinate validity, and record ordering.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_validate_gps.html">grz_validate_gps()</a></code></td>
+<td>Performs GPS-specific checks (missing fixes, impossible coordinates, duplicates, irregular sampling).</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="cleaning">Cleaning<a class="anchor" aria-label="anchor" href="#cleaning"></a>
+</h3>
+<p>Cleaning functions remove or flag records that may bias movement and behaviour metrics.</p>
+<table class="table">
+<colgroup>
+<col width="52%">
+<col width="47%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code><a href="reference/grz_clean_duplicates.html">grz_clean_duplicates()</a></code></td>
+<td>Removes duplicate fixes.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_clean_errors.html">grz_clean_errors()</a></code></td>
+<td>Removes missing or impossible values (coordinates, timestamps).</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_clean_speed_fixed.html">grz_clean_speed_fixed()</a></code></td>
+<td>Removes biologically implausible steps using a fixed speed threshold.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_clean_speed_stat.html">grz_clean_speed_stat()</a></code></td>
+<td>Identifies speed outliers using data-driven thresholds.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_append_paddock_names.html">grz_append_paddock_names()</a></code></td>
+<td>Assigns paddock or area identifiers via spatial overlay.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_clean_spatial.html">grz_clean_spatial()</a></code></td>
+<td>Removes fixes outside expected spatial boundaries.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_denoise.html">grz_denoise()</a></code></td>
+<td>Reduces GPS jitter and small-scale location noise.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_clean.html">grz_clean()</a></code></td>
+<td>Runs selected cleaning steps as a reproducible pipeline.</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="row-level-metrics">Row-level metrics<a class="anchor" aria-label="anchor" href="#row-level-metrics"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="52%">
+<col width="47%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code><a href="reference/grz_calculate_movement.html">grz_calculate_movement()</a></code></td>
+<td>Computes step length, speed, turning, and related movement metrics.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_calculate_social.html">grz_calculate_social()</a></code></td>
+<td>Calculates proximity and nearest-neighbour metrics between animals.</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="epoch-level-summaries">Epoch-level summaries<a class="anchor" aria-label="anchor" href="#epoch-level-summaries"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="52%">
+<col width="47%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code><a href="reference/grz_summarise_movement.html">grz_summarise_movement()</a></code></td>
+<td>Aggregates movement metrics by time window (e.g. hour, day).</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_summarise_social.html">grz_summarise_social()</a></code></td>
+<td>Aggregates social metrics across epochs.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_calculate_spatial.html">grz_calculate_spatial()</a></code></td>
+<td>Summarises spatial use (e.g. paddock utilisation, time in areas).</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_calculate_epoch_metrics.html">grz_calculate_epoch_metrics()</a></code></td>
+<td>Produces a combined set of movement, social, and spatial summaries.</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</div>
+<div class="section level3">
+<h3 id="behaviour-tools">Behaviour tools<a class="anchor" aria-label="anchor" href="#behaviour-tools"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="52%">
+<col width="47%">
+</colgroup>
+<thead><tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code><a href="reference/grz_plot_diurnal_metrics.html">grz_plot_diurnal_metrics()</a></code></td>
+<td>Visualises diurnal patterns in movement and social metrics.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_behavior_threshold_guide.html">grz_behavior_threshold_guide()</a></code></td>
+<td>Suggests candidate thresholds for activity classification.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_tune_thresholds.html">grz_tune_thresholds()</a></code></td>
+<td>Tunes thresholds using labelled data or heuristics.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_classify_activity_hmm.html">grz_classify_activity_hmm()</a></code></td>
+<td>Classifies activity using a hidden Markov model.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_classify_activity_spatial.html">grz_classify_activity_spatial()</a></code></td>
+<td>Classifies activity using spatial or rule-based features.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_classify_activity_consensus.html">grz_classify_activity_consensus()</a></code></td>
+<td>Combines outputs from multiple classification methods.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_classify_behavior.html">grz_classify_behavior()</a></code></td>
+<td>Produces final behavioural state labels.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_plot_diurnal_states.html">grz_plot_diurnal_states()</a></code></td>
+<td>Visualises behavioural states across time-of-day.</td>
+</tr>
+<tr class="odd">
+<td><code><a href="reference/grz_validate_behavior.html">grz_validate_behavior()</a></code></td>
+<td>Performs QA checks on behavioural outputs.</td>
+</tr>
+<tr class="even">
+<td><code><a href="reference/grz_behavior_pipeline.html">grz_behavior_pipeline()</a></code></td>
+<td>Runs an end-to-end behaviour classification workflow.</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 <div class="section level2">
 <h2 id="interactive-tools">Interactive Tools<a class="anchor" aria-label="anchor" href="#interactive-tools"></a>
@@ -144,18 +375,8 @@
 <li>
 <code><a href="reference/grz_map.html">grz_map()</a></code> for interactive GPS mapping.</li>
 <li>
-<code><a href="reference/grz_label_gps_states.html">grz_label_gps_states()</a></code> for manual <code>ACTIVE</code>/<code>INACTIVE</code> state labelling in a timeline app.</li>
+<code><a href="reference/grz_label_gps_states.html">grz_label_gps_states()</a></code> for manual <code>ACTIVE</code>/<code>INACTIVE</code> state labelling in a timeline app. For use in the activity state (HMM and KDE determination) pipeline.</li>
 </ul>
-<p>Example:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">labelled</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grz_label_gps_states.html">grz_label_gps_states</a></span><span class="op">(</span></span>
-<span>  data <span class="op">=</span> <span class="va">gps_clean</span>,</span>
-<span>  lon <span class="op">=</span> <span class="st">"lon"</span>,</span>
-<span>  lat <span class="op">=</span> <span class="st">"lat"</span>,</span>
-<span>  time <span class="op">=</span> <span class="st">"datetime"</span>,</span>
-<span>  color_by <span class="op">=</span> <span class="st">"sensor_id"</span>,</span>
-<span>  initial_label_col <span class="op">=</span> <span class="st">"label"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="output-conventions">Output Conventions<a class="anchor" aria-label="anchor" href="#output-conventions"></a>

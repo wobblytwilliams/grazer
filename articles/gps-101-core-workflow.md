@@ -43,8 +43,24 @@ library(ggplot2)
 ## 2) Create an example GPS table
 
 This vignette uses synthetic data so it is fully reproducible.  
-In real projects, you would usually start with
-`grz_read_gps("your_file.csv")`.
+In real projects, start by reading your file, mapping to the required
+schema, then validating:
+
+``` r
+gps_raw <- readr::read_csv("your_file.csv", show_col_types = FALSE)
+
+# Required canonical columns for grazer:
+# sensor_id, datetime, lon, lat
+gps <- dplyr::rename(
+  gps_raw,
+  sensor_id = device_id,
+  datetime = Time,
+  lon = Longitude,
+  lat = Latitude
+)
+
+gps <- grz_validate(gps, drop_invalid = FALSE, verbose = TRUE)
+```
 
 How this works in practice:
 
@@ -284,7 +300,7 @@ gps_movement %>%
 #> (`stat_bin()`).
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-7-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-8-1.png)
 
 ``` r
 gps_movement %>%
@@ -308,7 +324,7 @@ gps_movement %>%
 #> (`geom_point()`).
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-8-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-9-1.png)
 
 ## 6) Calculate social metrics (row-level)
 
@@ -401,7 +417,7 @@ gps_social_tbl %>%
 #> (`stat_density()`).
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-10-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png)
 
 ``` r
 gps_social_tbl %>%
@@ -420,7 +436,7 @@ gps_social_tbl %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-11-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-12-1.png)
 
 ## 7) Summarise to day-level movement, social, and spatial outputs
 
@@ -499,7 +515,7 @@ daily_metrics %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-13-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-14-1.png)
 
 ``` r
 daily_metrics %>%
@@ -517,7 +533,7 @@ daily_metrics %>%
   theme_minimal()
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-14-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png)
 
 ## 8) Diurnal feature plots
 
@@ -547,7 +563,7 @@ grz_plot_diurnal_metrics(
 )
 ```
 
-![](gps-101-core-workflow_files/figure-html/unnamed-chunk-15-1.png)
+![](gps-101-core-workflow_files/figure-html/unnamed-chunk-16-1.png)
 
 ## Next Step
 

@@ -1,21 +1,25 @@
 # grazer
 
-`grazer` provides tools to ingest, clean, map, and analyse GPS data from
-cattle grazing experiments.
+`grazer` simplifies the process of working with GPS data from livestock
+grazing systems. It centralises commonly used cleaning methods and
+metric calculations, providing a consistent workflow for preparing
+movement, social, and basic spatial summaries.
 
-The package is designed around a practical pipeline: data import -\>
-validation -\> cleaning -\> metric calculation -\> behavior
-interpretation.
+The package also includes quick interactive mapping and tools for
+visually annotating GPS data, supporting the creation of labelled
+datasets for behavioural interpretation.
 
-Website (pkgdown): <https://wobblytwilliams.github.io/grazer/>
+Outputs are analysis-ready datasets and summaries suitable for
+visualisation, statistical analysis, and inclusion in scientific
+publications. `grazer` is not intended to cover every telemetry
+workflow; rather, it supports scientists entering the precision
+livestock research space by providing a practical and reproducible
+starting point.
+
+For tutorials and updates visit:
+<https://wobblytwilliams.github.io/grazer/>
 
 ## Installation
-
-Install the released version from CRAN (once available):
-
-``` r
-# install.packages("grazer")
-```
 
 Install the development version from GitHub:
 
@@ -26,25 +30,69 @@ devtools::install_github("wobblytwilliams/grazer")
 
 ## Input Data Requirements
 
-Minimum required columns are:
+`grazer` operates on time-ordered GPS observations representing
+individual animals or devices. To ensure consistent processing and
+reproducible metrics, the input dataset must contain the following
+minimum fields:
 
-| Column      | Description                                        |
-|-------------|----------------------------------------------------|
-| `sensor_id` | Device or animal identifier                        |
-| `datetime`  | Timestamp (`POSIXct` or parseable datetime string) |
-| `lon`       | Longitude (decimal degrees)                        |
-| `lat`       | Latitude (decimal degrees)                         |
+| Column      | Description                                                                                                     |
+|-------------|-----------------------------------------------------------------------------------------------------------------|
+| `sensor_id` | Unique identifier for the animal, collar, or device. Used to group trajectories and compute individual metrics. |
+| `datetime`  | Timestamp of the GPS fix. Must be `POSIXct` or a parseable datetime string.                                     |
+| `lon`       | Longitude in decimal degrees (WGS84).                                                                           |
+| `lat`       | Latitude in decimal degrees (WGS84).                                                                            |
 
-Additional columns are treated as metadata and retained through the
-workflow where possible.
+If your source file uses different headings, rename them to these
+canonical names before calling
+[`grz_validate()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate.md).
+
+### Why these fields are required
+
+These variables allow `grazer` to reconstruct movement paths through
+space and time. From them, the package derives:
+
+- step lengths and speeds  
+- movement persistence and activity patterns  
+- proximity and social interactions  
+- spatial use and utilisation patterns  
+- time-based summaries (hourly, daily, seasonal)
+
+Using a consistent schema ensures calculations are reproducible across
+studies and comparable between deployments, properties, and experiments.
+
+A standardised structure also supports **data sharing and
+collaboration**, enabling datasets from different projects,
+institutions, and sensor platforms to be combined without extensive
+reformatting. This promotes interoperability and reduces preprocessing
+overhead when integrating multi-site or multi-year studies.
+
+### Additional columns
+
+`grazer` assumes that your dataset contains additional contextual
+information you may wish to retain, such as paddock, treatment group,
+herd, collar type, pasture condition, or environmental covariates.
+
+These fields are treated as metadata and are preserved throughout
+cleaning, metric calculation, and summarisation steps wherever possible.
 
 ## Quick Start
 
 ``` r
 library(grazer)
 
-# 1) Read and validate
-gps <- grz_read_gps("path/to/gps.csv", validate = FALSE)
+# 1) Read (outside grazer), then rename to required schema and validate
+gps_raw <- readr::read_csv("path/to/gps.csv", show_col_types = FALSE)
+
+# Required names for grazer are: sensor_id, datetime, lon, lat
+# Example rename if your source columns are named differently:
+gps <- dplyr::rename(
+  gps_raw,
+  sensor_id = device_id,
+  datetime = Time,
+  lon = Longitude,
+  lat = Latitude
+)
+
 gps <- grz_validate(gps, drop_invalid = TRUE)
 
 # 2) Clean
@@ -66,63 +114,81 @@ head(daily_metrics)
 
 ## Main Function Groups
 
-Ingest and validation: -
-[`grz_read_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_read_gps.md) -
-[`grz_standardise_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_standardise_gps.md) -
-[`grz_validate()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate.md) -
-[`grz_validate_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_gps.md)
+## Main Function Groups
 
-Cleaning: -
-[`grz_clean_duplicates()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_duplicates.md) -
-[`grz_clean_errors()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_errors.md) -
-[`grz_clean_speed_fixed()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_fixed.md) -
-[`grz_clean_speed_stat()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_stat.md) -
-[`grz_append_paddock_names()`](https://wobblytwilliams.github.io/grazer/reference/grz_append_paddock_names.md) -
-[`grz_clean_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_spatial.md) -
-[`grz_denoise()`](https://wobblytwilliams.github.io/grazer/reference/grz_denoise.md) -
-[`grz_clean()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean.md)
+`grazer` functions follow a typical telemetry workflow: validate inputs
+→ clean tracks → derive metrics → summarise patterns → interpret
+behaviour.
 
-Row-level metrics: -
-[`grz_calculate_movement()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_movement.md) -
-[`grz_calculate_social()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_social.md)
+### Ingest & validation
 
-Epoch-level summaries: -
-[`grz_summarise_movement()`](https://wobblytwilliams.github.io/grazer/reference/grz_summarise_movement.md) -
-[`grz_summarise_social()`](https://wobblytwilliams.github.io/grazer/reference/grz_summarise_social.md) -
-[`grz_calculate_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_spatial.md) -
-[`grz_calculate_epoch_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_epoch_metrics.md)
+| Function                                                                                       | Purpose                                                                                               |
+|------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| [`grz_validate()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate.md)         | Checks required fields, timestamps, coordinate validity, and record ordering.                         |
+| [`grz_validate_gps()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_gps.md) | Performs GPS-specific checks (missing fixes, impossible coordinates, duplicates, irregular sampling). |
 
-Behavior tools: -
-[`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md) -
-[`grz_behavior_threshold_guide()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_threshold_guide.md) -
-[`grz_tune_thresholds()`](https://wobblytwilliams.github.io/grazer/reference/grz_tune_thresholds.md) -
-[`grz_classify_activity_hmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_hmm.md) -
-[`grz_classify_activity_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_spatial.md) -
-[`grz_classify_activity_consensus()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.md) -
-[`grz_classify_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_behavior.md) -
-[`grz_plot_diurnal_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_states.md) -
-[`grz_validate_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_behavior.md) -
-[`grz_behavior_pipeline()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_pipeline.md)
+------------------------------------------------------------------------
+
+### Cleaning
+
+Cleaning functions remove or flag records that may bias movement and
+behaviour metrics.
+
+| Function                                                                                                       | Purpose                                                               |
+|----------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| [`grz_clean_duplicates()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_duplicates.md)         | Removes duplicate fixes.                                              |
+| [`grz_clean_errors()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_errors.md)                 | Removes missing or impossible values (coordinates, timestamps).       |
+| [`grz_clean_speed_fixed()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_fixed.md)       | Removes biologically implausible steps using a fixed speed threshold. |
+| [`grz_clean_speed_stat()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_speed_stat.md)         | Identifies speed outliers using data-driven thresholds.               |
+| [`grz_append_paddock_names()`](https://wobblytwilliams.github.io/grazer/reference/grz_append_paddock_names.md) | Assigns paddock or area identifiers via spatial overlay.              |
+| [`grz_clean_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean_spatial.md)               | Removes fixes outside expected spatial boundaries.                    |
+| [`grz_denoise()`](https://wobblytwilliams.github.io/grazer/reference/grz_denoise.md)                           | Reduces GPS jitter and small-scale location noise.                    |
+| [`grz_clean()`](https://wobblytwilliams.github.io/grazer/reference/grz_clean.md)                               | Runs selected cleaning steps as a reproducible pipeline.              |
+
+------------------------------------------------------------------------
+
+### Row-level metrics
+
+| Function                                                                                                   | Purpose                                                             |
+|------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| [`grz_calculate_movement()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_movement.md) | Computes step length, speed, turning, and related movement metrics. |
+| [`grz_calculate_social()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_social.md)     | Calculates proximity and nearest-neighbour metrics between animals. |
+
+------------------------------------------------------------------------
+
+### Epoch-level summaries
+
+| Function                                                                                                             | Purpose                                                             |
+|----------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| [`grz_summarise_movement()`](https://wobblytwilliams.github.io/grazer/reference/grz_summarise_movement.md)           | Aggregates movement metrics by time window (e.g. hour, day).        |
+| [`grz_summarise_social()`](https://wobblytwilliams.github.io/grazer/reference/grz_summarise_social.md)               | Aggregates social metrics across epochs.                            |
+| [`grz_calculate_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_spatial.md)             | Summarises spatial use (e.g. paddock utilisation, time in areas).   |
+| [`grz_calculate_epoch_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_calculate_epoch_metrics.md) | Produces a combined set of movement, social, and spatial summaries. |
+
+------------------------------------------------------------------------
+
+### Behaviour tools
+
+| Function                                                                                                                     | Purpose                                                     |
+|------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|
+| [`grz_plot_diurnal_metrics()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_metrics.md)               | Visualises diurnal patterns in movement and social metrics. |
+| [`grz_behavior_threshold_guide()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_threshold_guide.md)       | Suggests candidate thresholds for activity classification.  |
+| [`grz_tune_thresholds()`](https://wobblytwilliams.github.io/grazer/reference/grz_tune_thresholds.md)                         | Tunes thresholds using labelled data or heuristics.         |
+| [`grz_classify_activity_hmm()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_hmm.md)             | Classifies activity using a hidden Markov model.            |
+| [`grz_classify_activity_spatial()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_spatial.md)     | Classifies activity using spatial or rule-based features.   |
+| [`grz_classify_activity_consensus()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_activity_consensus.md) | Combines outputs from multiple classification methods.      |
+| [`grz_classify_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_classify_behavior.md)                     | Produces final behavioural state labels.                    |
+| [`grz_plot_diurnal_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_plot_diurnal_states.md)                 | Visualises behavioural states across time-of-day.           |
+| [`grz_validate_behavior()`](https://wobblytwilliams.github.io/grazer/reference/grz_validate_behavior.md)                     | Performs QA checks on behavioural outputs.                  |
+| [`grz_behavior_pipeline()`](https://wobblytwilliams.github.io/grazer/reference/grz_behavior_pipeline.md)                     | Runs an end-to-end behaviour classification workflow.       |
 
 ## Interactive Tools
 
 - [`grz_map()`](https://wobblytwilliams.github.io/grazer/reference/grz_map.md)
   for interactive GPS mapping.
 - [`grz_label_gps_states()`](https://wobblytwilliams.github.io/grazer/reference/grz_label_gps_states.md)
-  for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app.
-
-Example:
-
-``` r
-labelled <- grz_label_gps_states(
-  data = gps_clean,
-  lon = "lon",
-  lat = "lat",
-  time = "datetime",
-  color_by = "sensor_id",
-  initial_label_col = "label"
-)
-```
+  for manual `ACTIVE`/`INACTIVE` state labelling in a timeline app. For
+  use in the activity state (HMM and KDE determination) pipeline.
 
 ## Output Conventions
 
