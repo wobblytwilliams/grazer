@@ -1,8 +1,8 @@
 ---
-title: "GPS 201: GMM Activity Classification and Validation"
+title: "GPS 103: GMM Activity Classification and Validation"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{GPS 201: GMM Activity Classification and Validation}
+  %\VignetteIndexEntry{GPS 103: GMM Activity Classification and Validation}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

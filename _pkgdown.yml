@@ -18,4 +18,5 @@ articles:
     navbar: Tutorials
     contents:
       - gps-101-core-workflow
-      - gps-201-activity-and-validation
+      - gps-102-playback-gps
+      - gps-103-activity-and-validation

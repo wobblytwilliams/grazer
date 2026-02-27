@@ -486,8 +486,9 @@ grz_plot_diurnal_metrics(
 
 ## Next Step
 
-Continue to the 201 tutorial for:
+Continue to GPS 102 for interactive playback mapping, then GPS 103 for:
 
+- timeline playback QA with `grz_playback_gps()`,
 - active/inactive classification,
 - manual state labelling with `grz_label_gps_states()`,
 - and prediction-vs-label validation.

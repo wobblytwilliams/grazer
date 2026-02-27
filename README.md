@@ -8,6 +8,8 @@ Outputs are analysis-ready datasets and summaries suitable for visualisation, st
 
 For tutorials and updates visit: <https://wobblytwilliams.github.io/grazer/>
 
+Maintainer: Dr Thomas Williams (<t.m.williams@cqu.edu.au>)
+
 ## Installation
 
 Install the development version from GitHub:

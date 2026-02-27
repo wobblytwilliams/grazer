@@ -2,7 +2,7 @@ Package: grazer
 Title: Ingest, Clean, and Analyze Cattle GPS Data
 Version: 0.0.0.9000
 Authors@R: 
-    person("Grazer", "Maintainer", email = "maintainer@example.com", role = c("aut", "cre"))
+    person(c("Dr", "Thomas"), "Williams", email = "t.m.williams@cqu.edu.au", role = c("aut", "cre"))
 Description: Lightweight tools for cattle grazing experiments that support
     GPS data ingestion, cleaning, and basic movement summaries.
 URL: https://github.com/wobblytwilliams/grazer, https://wobblytwilliams.github.io/grazer/
