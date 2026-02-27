@@ -12,10 +12,8 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Imports:
-    data.table,
-    tools
+    data.table
 Suggests:
-    arrow,
     dplyr,
     ggplot2,
     knitr,
@@ -25,6 +23,7 @@ Suggests:
     leaftime,
     htmlwidgets,
     jsonlite,
+    readr,
     rmarkdown,
     shiny,
     sf,

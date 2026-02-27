@@ -48,7 +48,24 @@ library(ggplot2)
 ## 2) Create an example GPS table
 
 This vignette uses synthetic data so it is fully reproducible.  
-In real projects, you would usually start with `grz_read_gps("your_file.csv")`.
+In real projects, start by reading your file, mapping to the required schema,
+then validating:
+
+```{r, eval = FALSE}
+gps_raw <- readr::read_csv("your_file.csv", show_col_types = FALSE)
+
+# Required canonical columns for grazer:
+# sensor_id, datetime, lon, lat
+gps <- dplyr::rename(
+  gps_raw,
+  sensor_id = device_id,
+  datetime = Time,
+  lon = Longitude,
+  lat = Latitude
+)
+
+gps <- grz_validate(gps, drop_invalid = FALSE, verbose = TRUE)
+```
 
 How this works in practice:
 
