@@ -36,9 +36,16 @@ It uses the Manbulloo dataset and follows a practical, investigator-led process:
 ## 0) Load packages
 
 ```{r}
+required_pkgs <- c("dplyr", "tidyr", "tibble", "ggplot2", "sf")
+missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_pkgs) > 0L) {
+  install.packages(missing_pkgs)
+}
+
 library(grazer)
 library(dplyr)
 library(tidyr)
+library(tibble)
 library(ggplot2)
 library(sf)
 ```
