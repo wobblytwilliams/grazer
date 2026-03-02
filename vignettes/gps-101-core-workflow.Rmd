@@ -12,504 +12,628 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 8,
-  fig.height = 5
+  fig.height = 5,
+  message = FALSE,
+  warning = FALSE
 )
-
-playback_pkgs <- c("leaflet", "leaftime", "htmlwidgets")
-playback_pkgs_ok <- all(vapply(playback_pkgs, requireNamespace, logical(1), quietly = TRUE))
 ```
 
 ## Overview
 
-This tutorial walks through the main `grazer` workflow for cattle GPS data:
+This tutorial is written for animal scientists who are new to GPS workflows.
+It uses the Manbulloo dataset and follows a practical, investigator-led process:
 
-1. Start from GPS rows in canonical columns (`sensor_id`, `datetime`, `lon`, `lat`).
-2. Validate required schema and data types.
-3. Run an interactive playback check to inspect trajectories over time.
-4. Clean obvious errors and noise.
-5. Calculate movement, social, and spatial metrics.
-6. Summarise results to daily metrics for interpretation.
+1. Bring in the data.
+2. Validate schema and minimum requirements.
+3. Clean the data with individual cleaning functions (not the wrapper).
+4. Calculate movement metrics.
+5. Summarise movement and inspect diurnal structure.
+6. Calculate social metrics.
+7. Summarise social metrics.
+8. Summarise spatial metrics and week-to-week overlap.
+9. Show helper visualisation functions and conclude.
 
-## Why This Workflow?
-
-A structured pipeline improves reproducibility and interpretation:
-
-- You detect data issues before model fitting.
-- You apply cleaning rules consistently across experiments.
-- You generate comparable metrics across paddocks, cohorts, and deployments.
-- You keep row-level and day-level outputs aligned for QA and reporting.
-
-## 1) Load packages
+## 0) Load packages
 
 ```{r}
 library(grazer)
 library(dplyr)
 library(tidyr)
-library(tibble)
 library(ggplot2)
+library(readr)
+library(sf)
 ```
 
-## 2) Create an example GPS table
+## 1) Bring in the data
 
-This vignette uses synthetic data so it is fully reproducible.  
-In real projects, start by reading your file, mapping to the required schema,
-then validating:
+For this tutorial we use the in-built dataset. This is simulated dataset, trained off real gps tracking data from for diverse regions. The paddock used for the simulation is a random paddock identfied and mapped via satellite imagery for the purposes of simulating a livestock tracking dataset. The simulated cattle presented in this tutorial have no associated with the land owner.
 
-```{r, eval = FALSE}
-gps_raw <- readr::read_csv("your_file.csv", show_col_types = FALSE)
+To keep runtime practical while still being representative, we subset to:
+- first 15 collars
+- first 12 weeks from deployment start
 
-# Required canonical columns for grazer:
-# sensor_id, datetime, lon, lat
-gps <- dplyr::rename(
-  gps_raw,
-  sensor_id = device_id,
-  datetime = Time,
-  lon = Longitude,
-  lat = Latitude
-)
-
-gps <- grz_validate(gps, drop_invalid = FALSE, verbose = TRUE)
-```
-
-How this works in practice:
-
-- Keep raw ingest as close as possible to source files.
-- Add only minimal transformations before validation.
-- Preserve metadata columns so they can be used later in grouping and summaries.
-
-Common pitfalls and checks:
-
-- Pitfall: parsing datetimes in local time by accident.  
-  Check: confirm all times are parsed in the same timezone (typically UTC).
-- Pitfall: silently coercing text coordinates to `NA`.  
-  Check: inspect rows with missing/invalid `lon`/`lat` before cleaning.
 
 ```{r}
-set.seed(101)
+data_file <- file.path("test_data", "ManbullooToSimulate.csv")
 
-timestamps <- seq(
-  from = as.POSIXct("2024-05-01 00:00:00", tz = "UTC"),
-  by = "10 min",
-  length.out = 3 * 24 * 6
-)
+gps_raw <- readr::read_csv(data_file)
 
-animal_info <- tibble(
-  sensor_id = c("A01", "A02", "A03"),
-  lon0 = c(132.305, 132.299, 132.311),
-  lat0 = c(-14.474, -14.471, -14.468)
-)
+sensor_keep <- sort(unique(gps_raw$sensor_id))
+sensor_keep <- sensor_keep[seq_len(min(15L, length(sensor_keep)))]
 
-gps_list <- list()
-for (i in seq_len(nrow(animal_info))) {
-  gps_list[[i]] <- tibble(
-    sensor_id = animal_info$sensor_id[i],
-    datetime = timestamps,
-    lon = animal_info$lon0[i] + cumsum(rnorm(length(timestamps), 0, 0.00018)),
-    lat = animal_info$lat0[i] + cumsum(rnorm(length(timestamps), 0, 0.00015))
-  )
-}
-gps_raw <- bind_rows(gps_list)
 
-# Add a few realistic issues so validation and cleaning have visible effects.
-gps_raw <- bind_rows(gps_raw, gps_raw %>% slice(1:5)) # duplicate rows
-gps_raw$lon[20] <- 0                                  # invalid location (0,0)
-gps_raw$lat[20] <- 0
-gps_raw$datetime[33] <- NA                            # invalid datetime
+start_time <- min(gps_raw$datetime, na.rm = TRUE)
+end_time <- start_time + as.difftime(12L, units = "weeks")
 
-nrow(gps_raw)
-head(gps_raw)
+gps <- gps_raw %>%
+    filter(sensor_id %in% sensor_keep,
+     datetime >= start_time, datetime < end_time)
+
+dplyr::glimpse(gps)
 ```
 
-## 3) Validate required columns and row values
+### 1b) Quick interactive map preview (first 4 days)
 
 ```{r}
-gps_valid <- grz_validate(
-  data = gps_raw,
-  drop_invalid = FALSE,
-  verbose = TRUE
+map_4d <- gps %>%
+  filter(datetime < min(datetime, na.rm = TRUE) + as.difftime(4, units = "days"))
+
+grz_map(
+  data = map_4d,
+  group = "sensor_id",
+  timeline = TRUE,
+  popup_fields = c("sensor_id", "datetime"),
+  warnings = FALSE
 )
+```
 
-validation_qc <- attr(gps_valid, "validation_qc")
-invalid_rows <- attr(gps_valid, "invalid_rows")
+## 2) Validate and explain minimum schema
 
-validation_qc
+`grazer` minimum required columns:
+- `sensor_id`: collar/animal ID
+- `datetime`: timestamp
+- `lon`: longitude (WGS84)
+- `lat`: latitude (WGS84)
+
+Manbulloo is already in that schema, so we can validate directly.
+
+```{r}
+gps_valid_report <- grz_validate(gps, drop_invalid = FALSE, verbose = FALSE)
+val_qc <- attr(gps_valid_report, "validation_qc")
+invalid_rows <- attr(gps_valid_report, "invalid_rows")
+
+val_qc
 head(invalid_rows)
 ```
 
-The validation object provides:
-
-- `validation_qc`: counts/proportions of invalid records by issue type.
-- `invalid_rows`: full rows that failed validation checks, with `invalid_reason`.
-
-How this works in practice:
-
-- `grz_validate()` enforces the minimum schema (`sensor_id`, `datetime`, `lon`, `lat`).
-- It parses and type-checks each core field.
-- It records invalid reasons at row level so decisions are auditable.
-
-Common pitfalls and checks:
-
-- Pitfall: dropping invalid rows too early can hide data-logger issues.  
-  Check: run once with `drop_invalid = FALSE` and inspect `invalid_rows`.
-- Pitfall: blank `sensor_id` values across multiple animals.  
-  Check: verify `sensor_id` uniqueness and completeness before movement metrics.
-
-## 4) Interactive playback quick look (after validate)
-
-Before cleaning and feature derivation, it is useful to visually inspect the
-validated trajectories in a timeline map.
+For cleaning we usually proceed with invalid rows dropped:
 
 ```{r}
-if (playback_pkgs_ok) {
-  gps_valid_map <- grz_validate(
-    data = gps_raw,
-    drop_invalid = TRUE,
+gps_valid <- grz_validate(gps, drop_invalid = TRUE, verbose = FALSE)
+```
+
+## 3) Start cleaning (individual functions first)
+
+### 3a) Remove duplicates
+
+```{r}
+gps_dedup <- grz_clean_duplicates(gps_valid, verbose = FALSE)
+```
+
+### 3b) Filter to paddock extent (100 m buffer)
+
+Put your paddock boundary KML in `data/paddock.kml`.
+KML imports commonly expose paddock names in `Name` or `Description`;
+`grz_clean_spatial()` accepts either.
+
+```{r}
+paddock_path <- file.path("test_data", "paddock.kml")
+
+paddocks_sf <- sf::st_read(paddock_path, quiet = TRUE)
+
+gps_spatial <- grz_clean_spatial(
+    data = gps_dedup,
+    paddocks_sf = paddocks_sf,
+    buffer_m = 100,
+    append_paddock = TRUE,
     verbose = FALSE
-  )
-
-  playback_map <- grz_playback_gps(
-    data = gps_valid_map,
-    group = "sensor_id",
-    align = TRUE,
-    align_interval_mins = 20,
-    tail_points = 20,
-    show_points = TRUE,
-    point_size_slider = TRUE,
-    point_size_min = 1,
-    point_size_max = 20,
-    playback_steps = 800,
-    playback_duration_ms = 18000,
-    popup_fields = c("sensor_id", "datetime"),
-    warnings = FALSE,
-    progress = FALSE,
-    show_loading_overlay = TRUE
-  )
-
-  playback_map
-} else {
-  cat(
-    "Playback widget skipped because required packages are not available: ",
-    paste(playback_pkgs, collapse = ", "),
-    ".\n",
-    sep = ""
-  )
-  NULL
-}
-```
-
-How this works in practice:
-
-- Playback gives an immediate quality check for track continuity and obvious artefacts.
-- The timeline control helps inspect movement over time before committing to cleaning settings.
-- Point-size slider makes sparse and dense periods easier to inspect.
-
-## 5) Clean the GPS rows
-
-This run applies four common cleaning steps:
-
-- `duplicates`: removes repeated fixes.
-- `errors`: drops invalid coordinates and malformed rows.
-- `speed_fixed`: removes biologically implausible moves.
-- `denoise`: reduces local GPS bounce in static periods.
-
-```{r}
-gps_clean <- grz_clean(
-  data = gps_valid,
-  steps = c("duplicates", "errors", "speed_fixed", "denoise"),
-  max_speed_mps = 4,
-  verbose = TRUE
 )
 
-nrow(gps_clean)
-head(gps_clean)
 ```
 
-How this works in practice:
-
-- Cleaning is intentionally drop-based and ordered.
-- Duplicate and invalid coordinate fixes are removed first.
-- Speed filtering removes biologically implausible jumps.
-- Denoising removes jitter during likely static periods.
-
-Common pitfalls and checks:
-
-- Pitfall: speed threshold too strict for your production class (e.g., mustering).  
-  Check: inspect upper speed tail before setting `max_speed_mps`.
-- Pitfall: aggressive denoising in coarse sampling intervals.  
-  Check: compare pre/post row counts by animal and day.
-
-## 6) Calculate movement metrics (row-level)
+Basic QA plot: 10% sample of points + paddock boundary.
+Because filtering is done with a 100 m buffer, we show both:
+- solid line = original boundary
+- dashed line = +100 m buffered extent used for filtering
 
 ```{r}
-gps_movement <- grz_calculate_movement(gps_clean, verbose = FALSE)
+set.seed(101)
+plot_idx <- sample.int(nrow(gps_spatial), max(1L, floor(0.10 * nrow(gps_spatial))))
+gps_plot <- gps_spatial[plot_idx, ]
+paddock_buffer_sf <- NULL
 
-movement_view <- gps_movement %>%
-  as_tibble() %>%
-  select(sensor_id, datetime, step_m, speed_mps, turn_rad)
+paddock_union <- sf::st_union(sf::st_geometry(paddocks_sf))
+ctr <- sf::st_coordinates(sf::st_centroid(paddock_union))
+utm_zone <- floor((ctr[1] + 180) / 6) + 1
+utm_epsg <- if (ctr[2] >= 0) 32600 + utm_zone else 32700 + utm_zone
 
-movement_view
+paddock_buffer_sf <- paddocks_sf %>%
+  sf::st_transform(utm_epsg) %>%
+  sf::st_buffer(dist = 100) %>%
+  sf::st_transform(4326)
 
-movement_more <- setdiff(names(gps_movement), names(movement_view))
-cat(
-  "i",
-  length(movement_more),
-  "more columns:",
-  paste(head(movement_more, 10), collapse = ", "),
-  if (length(movement_more) > 10) ", ..." else "",
-  "\n"
-)
-```
-
-Key movement variables:
-
-- `step_m`: great-circle distance between consecutive fixes.
-- `speed_mps`: step distance divided by elapsed time in seconds.
-- `turn_rad`: absolute turning angle (radians) between consecutive bearings.
-
-How this works in practice:
-
-- `step_m` is great-circle distance between consecutive fixes.
-- `speed_mps` is `step_m / step_dt_s`.
-- `turn_rad` uses the absolute difference in successive headings.
-
-Common pitfalls and checks:
-
-- Pitfall: irregular fix intervals inflate/deflate apparent speed.  
-  Check: inspect `step_dt_s` distribution.
-- Pitfall: first fix per track has no lag values.  
-  Check: expect `NA` in first row of each group for lag-derived metrics.
-
-```{r}
-gps_movement %>%
-  as_tibble() %>%
-  ggplot(aes(x = step_m, fill = sensor_id)) +
-  geom_histogram(bins = 40, alpha = 0.55, position = "identity") +
-  labs(
-    title = "Step Distance Distribution",
-    x = "Step distance (m)",
-    y = "Count",
-    fill = "Sensor ID"
+p <- ggplot() +
+  geom_point(
+    data = gps_plot,
+    aes(x = lon, y = lat),
+    alpha = 0.3,
+    size = 0.8,
+    color = "#2b8cbe"
   ) +
-  theme_minimal()
-```
-
-```{r}
-gps_movement %>%
-  as_tibble() %>%
-  mutate(hour = as.integer(format(datetime, "%H", tz = "UTC"))) %>%
-  ggplot(aes(x = hour, y = speed_mps, color = sensor_id)) +
-  geom_point(alpha = 0.25, size = 1) +
-  geom_smooth(se = FALSE, linewidth = 0.8) +
-  scale_x_continuous(breaks = seq(0, 23, by = 3)) +
+  theme_minimal() +
   labs(
-    title = "Diurnal Speed Pattern",
-    x = "Hour of day (UTC)",
-    y = "Speed (m/s)",
-    color = "Sensor ID"
-  ) +
-  theme_minimal()
+    title = "10% GPS sample with paddock boundary (+100 m buffer)",
+    x = "Longitude",
+    y = "Latitude"
+  )
+
+p <- p +
+   geom_sf(data = paddock_buffer_sf, fill = NA, color = "black", linetype = "22", linewidth = 0.5, inherit.aes = FALSE) +
+   geom_sf(data = paddocks_sf, fill = NA, color = "black", linewidth = 0.6, inherit.aes = FALSE)
+
+p
 ```
 
-## 7) Calculate social metrics (row-level)
+### 3c) Filter extreme speeds
+
+This is a heuristic step. You must decide what is biologically realistic for
+your herd/context.
+
+In future work, we intend to provide more formal statistical guidance.
 
 ```{r}
-gps_social <- grz_calculate_social(
-  gps_movement,
-  thresholds_m = c(30, 50, 100),
-  interpolate = FALSE,
+mv_before_speed <- grz_calculate_movement(gps_spatial, verbose = FALSE)
+
+gps_speed <- grz_clean_speed_fixed(
+  data = gps_spatial,
+  max_speed_mps = 3,
+  keep_speed_cols = FALSE,
   verbose = FALSE
 )
 
-n30_col <- grep("^n_within_\\s*30m$", names(gps_social), value = TRUE)
-if (length(n30_col) == 0L) {
-  stop("Expected a 30 m neighbour count column after grz_calculate_social().")
-}
+mv_after_speed <- grz_calculate_movement(gps_speed, verbose = FALSE)
+```
 
-gps_social_tbl <- gps_social %>%
-  as_tibble() %>%
-  mutate(n_within_30m = .data[[n30_col[[1]]]])
+```{r}
+speed_threshold <- 3
 
-social_view <- gps_social_tbl %>%
-  select(sensor_id, datetime, nearest_neighbor_m, n_within_30m, mean_dist_to_others_m)
+spd_summary <- tibble(
+  stage = c("Before speed filter", "After speed filter"),
+  speed = list(mv_before_speed$speed_mps, mv_after_speed$speed_mps)
+) %>%
+  unnest(speed) %>%
+  filter(is.finite(speed), speed >= 0) %>%
+  mutate(over_threshold = speed > speed_threshold) %>%
+  summarise(
+    fixes_over_threshold = sum(over_threshold),
+    total_fixes = n(),
+    pct_over_threshold = 100 * fixes_over_threshold / total_fixes,
+    .by = stage
+  )
 
-social_view
+spd_summary
+```
 
-social_more <- setdiff(names(gps_social), names(social_view))
-cat(
-  "i",
-  length(social_more),
-  "more columns:",
-  paste(head(social_more, 10), collapse = ", "),
-  if (length(social_more) > 10) ", ..." else "",
-  "\n"
+Why do we still have speeds over 3mps?
+
+### 3d) Denoise
+
+Most livestock GPS trackers are single-frequency (L1) devices. In practical
+terms, that means location error and local jitter are expected, especially when
+animals are stationary.
+
+`grz_denoise()` supports:
+- `method = "statistical"`: spline smoothing on all points.
+- `method = "state_aware"`: collapse inactive runs to a robust median location,
+  then spline-smooth active runs.
+
+Depending what you're hoping to use it for, this step may not be required. Furthermore, `state_aware` denoise procedures will take some time to process.
+
+#### 3d-i) Create ACTIVE/INACTIVE labels with GMM + HMM smoothing
+
+We use movement features (mainly step and turning behaviour) to
+separate "low movement" vs "higher movement" states. HMM smoothing reduces
+point-to-point flicker in state labels.
+
+```{r}
+gps_for_state <- grz_calculate_movement(gps_speed, verbose = FALSE)
+
+gps_state <- grz_classify_activity_gmm(
+  data = gps_for_state,
+  smoothing = "hmm",
+  feature_set = "adaptive",
+  verbose = FALSE
 )
 ```
 
-Key social variables:
-
-- `nearest_neighbor_m`: distance to closest other animal at matching timestamp.
-- `n_within_30m`: number of other animals within 30 m.
-- `mean_dist_to_others_m`: average distance to all other animals.
-
-How this works in practice:
-
-- For each timestamp (and optional herd partition), pairwise distances are computed.
-- Nearest-neighbour metrics and threshold counts are derived from the distance matrix.
-- Threshold columns (`n_within_*m`, `any_within_*m`) support density/proximity interpretation.
-
-Common pitfalls and checks:
-
-- Pitfall: unsynchronised timestamps between collars.  
-  Check: use `grz_align()` when needed before social metrics.
-- Pitfall: interpreting social isolation in very small group sizes.  
-  Check: inspect `social_group_size` before interpretation.
+Output Active/Inactive periods for one animal around the:
 
 ```{r}
-gps_social_tbl %>%
-  ggplot(aes(x = nearest_neighbor_m, fill = sensor_id)) +
-  geom_density(alpha = 0.35) +
+focal_id <- gps_state %>%
+  count(sensor_id, name = "n_fixes", sort = TRUE) %>%
+  slice(1) %>%
+  pull(sensor_id)
+focal <- gps_state %>% filter(sensor_id == focal_id)
+
+mid_time <- as.POSIXct(stats::median(as.numeric(focal$datetime), na.rm = TRUE), origin = "1970-01-01", tz = "UTC")
+mid_day <- as.Date(mid_time, tz = "UTC")
+window_start <- as.POSIXct(mid_day - 2, tz = "UTC")
+window_end <- as.POSIXct(mid_day + 2, tz = "UTC")
+
+focal_two_days <- focal %>%
+  filter(datetime >= window_start, datetime < window_end) %>%
+  arrange(datetime)
+
+ggplot(focal_two_days, aes(x = lon, y = lat)) +
+  geom_path(alpha = 0.45, color = "grey50", linewidth = 0.5) +
+  geom_point(aes(color = activity_state_gmm), size = 1) +
+  theme_minimal() +
   labs(
-    title = "Nearest-Neighbour Distance Density",
-    x = "Nearest neighbour distance (m)",
-    y = "Density",
-    fill = "Sensor ID"
-  ) +
-  theme_minimal()
+    title = paste0("Two-day state-labelled track: ", focal_id),
+    x = "Longitude",
+    y = "Latitude",
+    color = "State"
+  )
 ```
 
+#### 3d-ii) Apply denoise algorithm
+
 ```{r}
-gps_social_tbl %>%
-  mutate(day = as.Date(datetime)) %>%
-  group_by(sensor_id, day) %>%
-  summarise(mean_n_within_30m = mean(n_within_30m, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = day, y = mean_n_within_30m, color = sensor_id)) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 1.8) +
-  labs(
-    title = "Daily Mean Number of Animals Within 30 m",
-    x = "Day",
-    y = "Mean n_within_30m",
-    color = "Sensor ID"
-  ) +
-  theme_minimal()
+gps_denoised <- grz_denoise(
+  data = gps_state,
+  method = "state_aware",
+  state_col = "activity_state_gmm",
+  keep_raw_coords = TRUE,
+  verbose = FALSE
+)
 ```
 
-## 8) Summarise to day-level movement, social, and spatial outputs
+And the resulting data will look like this:
 
 ```{r}
-daily_metrics <- grz_calculate_epoch_metrics(
+focal_id <- gps_denoised %>%
+  count(sensor_id, name = "n_fixes", sort = TRUE) %>%
+  slice(1) %>%
+  pull(sensor_id)
+focal <- gps_denoised %>% filter(sensor_id == focal_id)
+
+mid_time <- as.POSIXct(stats::median(as.numeric(focal$datetime), na.rm = TRUE), origin = "1970-01-01", tz = "UTC")
+mid_day <- as.Date(mid_time, tz = "UTC")
+window_start <- as.POSIXct(mid_day - 2, tz = "UTC")
+window_end <- as.POSIXct(mid_day + 2, tz = "UTC")
+
+focal_two_days <- focal %>%
+  filter(datetime >= window_start, datetime < window_end) %>%
+  arrange(datetime)
+
+ggplot(focal_two_days, aes(x = lon, y = lat)) +
+  geom_path(alpha = 0.45, color = "grey50", linewidth = 0.5) +
+  geom_point(aes(color = activity_state_gmm), size = 1) +
+  theme_minimal() +
+  labs(
+    title = paste0("Two-day state-labelled track: ", focal_id),
+    x = "Longitude",
+    y = "Latitude",
+    color = "State"
+  )
+```
+
+Does fitting splines make biological sense for 15 minute data? Consider the points in the top-left corner.
+
+Statistical-only mode is still available:
+
+```{r, eval = FALSE}
+gps_denoised_stat <- grz_denoise(
+  data = gps_speed,
+  method = "statistical",
+  keep_raw_coords = TRUE
+)
+```
+
+### QA checkpoint: weekly fixes per animal
+
+Here, we'd always recommend a check of the data. Have inadvertantly removed lots of data for one animal. This is up to the investigator to determine!!!
+
+This plote helps highlight low-performing devices. We intentionally keep this as an
+investigator decision, not an automated exclusion rule.
+
+```{r}
+study_start <- min(gps_denoised$datetime, na.rm = TRUE)
+qa_week <- gps_denoised %>%
+  mutate(
+    week_index = floor(as.numeric(difftime(datetime, study_start, units = "days")) / 7) + 1L
+  ) %>%
+  count(sensor_id, week_index, name = "n_fixes")
+
+max_week <- max(qa_week$week_index, na.rm = TRUE)
+
+ggplot(qa_week, aes(x = week_index, y = sensor_id, fill = n_fixes)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "C") +
+  scale_x_continuous(
+    breaks = seq_len(max_week),
+    labels = paste0("W", sprintf("%02d", seq_len(max_week)))
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Weekly fix counts by animal",
+    x = "Study week",
+    y = "Animal",
+    fill = "Fixes"
+  )
+```
+
+## 4) Movement metrics (row-level)
+
+Distance between fixes (`step_m`) and turning (`turn_rad`) are produced by
+`grz_calculate_movement()`.
+
+Grouping controls independent trajectories. By default, it groups by
+`deployment_id + sensor_id` when available (otherwise `sensor_id`).
+
+```{r}
+gps_move <- grz_calculate_movement(
+  data = gps_denoised,
+  groups = "sensor_id",
+  verbose = FALSE
+)
+
+gps_move %>%
+  select(
+    sensor_id, datetime, step_m, turn_rad, speed_mps,
+    any_of(c("deployment_id", "paddock"))
+  ) %>%
+  head()
+```
+
+Metadata columns are retained, so you can keep treatment/paddock context in
+downstream summaries.
+
+There are wrappers that run default summary pipelines (for example
+`grz_calculate_epoch_metrics()`), but if you need to tune assumptions, use the
+individual functions directly as shown here.
+
+## 5) Movement summaries and diurnal plots
+
+First, use the movement summary function:
+
+```{r}
+move_day <- grz_summarise_movement(
+  data = gps_move,
+  epoch = "day",
+  groups = "sensor_id",
+  verbose = FALSE
+)
+
+head(move_day)
+```
+
+Now build diurnal line plots for distance and turning:
+
+```{r}
+diurnal <- gps_move %>%
+  mutate(hour = as.integer(format(datetime, "%H", tz = "UTC"))) %>%
+  summarise(
+    mean_step = mean(step_m, na.rm = TRUE),
+    mean_turn = mean(turn_rad, na.rm = TRUE),
+    .by = hour
+  )
+
+
+diurnal_long <- bind_rows(
+  diurnal %>% transmute(hour, metric = "Step distance (m)", mean = mean_step),
+  diurnal %>% transmute(hour, metric = "Turn angle (rad)", mean = mean_turn)
+)
+
+ggplot(diurnal_long, aes(x = hour, y = mean)) +
+  geom_line(color = "#045a8d", linewidth = 0.9) +
+  facet_wrap(~metric, scales = "free_y", ncol = 1) +
+  scale_x_continuous(breaks = seq(0, 23, by = 3)) +
+  theme_minimal() +
+  labs(
+    title = "Diurnal movement profile (mean)",
+    x = "Hour (UTC)",
+    y = NULL
+  )
+```
+
+## 6) Social metrics
+
+We focus on:
+- nearest neighbour distance
+- number of neighbours within 30 m
+
+`grz_calculate_social()` aligns/interpolates to a regular interval before
+pairwise calculations when `interpolate = TRUE`.
+
+```{r}
+social_herd_groups <- if ("deployment_id" %in% names(gps_move)) "deployment_id" else NULL
+
+gps_social <- grz_calculate_social(
+  data = gps_move,
+  thresholds_m = 30,
+  align_interval_mins = "base",
+  align_max_gap_mins = NULL,
+  interpolate = TRUE,
+  herd_groups = social_herd_groups,
+  verbose = FALSE
+)
+
+n30_col <- grep("^n_within_30m$", names(gps_social), value = TRUE)
+if (length(n30_col) == 0L) {
+  n30_col <- grep("^n_within_.*30.*m$", names(gps_social), value = TRUE)
+}
+if (length(n30_col) == 0L) {
+  stop("Could not find `n_within_30m`-style column in social output.", call. = FALSE)
+}
+
+gps_social %>%
+  select(sensor_id, datetime, nearest_neighbor_m, all_of(n30_col[1])) %>%
+  head()
+```
+
+## 7) Social summaries (daily, first 4 weeks)
+
+```{r}
+social_day <- grz_summarise_social(
   data = gps_social,
   epoch = "day",
-  include = c("movement", "social", "spatial"),
+  groups = "sensor_id",
+  verbose = FALSE
+) %>%
+  mutate(date = as.Date(epoch))
+
+date_min <- min(social_day$date, na.rm = TRUE)
+social_4wk <- social_day %>%
+  filter(date < date_min + 28)
+
+n30_mean_col <- grep("^mean_n_within_30m$", names(social_4wk), value = TRUE)
+if (length(n30_mean_col) == 0L) {
+  n30_mean_col <- grep("^mean_n_within_.*30.*m$", names(social_4wk), value = TRUE)
+}
+if (length(n30_mean_col) == 0L) {
+  stop("Could not find mean n_within_30m summary column.", call. = FALSE)
+}
+
+social_plot <- bind_rows(
+  social_4wk %>% transmute(sensor_id, date, feature = "Mean nearest neighbour (m)", value = mean_nn_m),
+  social_4wk %>% transmute(sensor_id, date, feature = "Mean n within 30m", value = .data[[n30_mean_col[1]]])
+) %>%
+  filter(is.finite(value))
+
+if (nrow(social_plot) == 0L) {
+  stop("Social summary produced no finite values for plotting. Check interpolation and herd grouping.", call. = FALSE)
+}
+
+ggplot(social_plot, aes(x = date, y = value, color = sensor_id)) +
+  geom_line(linewidth = 0.8) +
+  facet_wrap(~feature, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  labs(
+    title = "Daily social summaries (first 4 weeks)",
+    x = "Date",
+    y = NULL,
+    color = "Animal"
+  )
+```
+
+## 8) Spatial summaries: weekly size and overlap for one animal
+
+```{r}
+hr_week <- grz_calculate_home_range(
+  data = gps_denoised,
+  method = "kde",
+  epoch = "week",
+  groups = "sensor_id",
+  levels = 95,
+  progress = TRUE,
   verbose = FALSE
 )
 
-summary_view <- daily_metrics %>%
-  as_tibble() %>%
-  select(sensor_id, epoch, total_distance_m, mean_nn_m, mcp95_area_ha)
-
-summary_view
-
-summary_more <- setdiff(names(daily_metrics), names(summary_view))
-cat(
-  "i",
-  length(summary_more),
-  "more columns:",
-  paste(head(summary_more, 10), collapse = ", "),
-  if (length(summary_more) > 10) ", ..." else "",
-  "\n"
+hr_change <- grz_summarise_home_range_change(
+  home_range = hr_week,
+  level = 95,
+  compare = "consecutive",
+  include_map_layers = FALSE,
+  verbose = FALSE
 )
 ```
 
-Key summary variables:
-
-- `total_distance_m`: total distance moved over the epoch.
-- `mean_nn_m`: mean nearest-neighbour distance over the epoch.
-- `mcp95_area_ha`: 95% minimum convex polygon home-range area (ha).
-
-How this works in practice:
-
-- Epoch summaries aggregate row-level metrics to `day`, `week`, or `month`.
-- Movement, social, and spatial blocks are merged on shared keys.
-- Spatial area metrics are only meaningful with adequate fixes per epoch.
-
-Common pitfalls and checks:
-
-- Pitfall: over-interpreting area estimates from sparse days.  
-  Check: screen by `n_fixes` before comparing `mcp95_area_ha`.
-- Pitfall: combining epochs with different grazing contexts.  
-  Check: facet/stratify by paddock, cohort, or treatment when available.
-
 ```{r}
-daily_metrics %>%
-  as_tibble() %>%
-  mutate(epoch = as.Date(epoch)) %>%
-  ggplot(aes(x = epoch, y = total_distance_m, color = sensor_id, group = sensor_id)) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 2) +
+hr_metrics <- as_tibble(hr_week$metrics)
+hr_changes <- as_tibble(hr_change$change_metrics)
+
+focal_id <- sort(unique(hr_metrics$sensor_id))[1]
+hr_one <- hr_metrics %>% filter(sensor_id == focal_id)
+if ("sensor_id" %in% names(hr_changes)) {
+  chg_one <- hr_changes %>% filter(sensor_id == focal_id)
+} else {
+  chg_one <- hr_changes
+}
+
+size_col <- grep("^hr95_ha$", names(hr_one), value = TRUE)
+if (length(size_col) == 0L) {
+  size_col <- grep("^hr.*95.*_ha$", names(hr_one), value = TRUE)
+}
+if (length(size_col) == 0L) {
+  stop("Could not find weekly 95% home-range size column.", call. = FALSE)
+}
+
+ggplot(hr_one, aes(x = epoch, y = .data[[size_col[1]]], group = 1)) +
+  geom_line(color = "#045a8d", linewidth = 0.9) +
+  geom_point(color = "#045a8d", size = 2) +
+  theme_minimal() +
   labs(
-    title = "Daily Total Distance by Animal",
-    x = "Day",
-    y = "Total distance (m)",
-    color = "Sensor ID"
+    title = paste0("Weekly home-range size (95%) for animal ", focal_id),
+    x = "Week",
+    y = "Area (ha)"
   ) +
-  theme_minimal()
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 ```{r}
-daily_metrics %>%
-  as_tibble() %>%
-  mutate(epoch = as.Date(epoch)) %>%
-  ggplot(aes(x = epoch, y = mcp95_area_ha, color = sensor_id, group = sensor_id)) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 2) +
-  labs(
-    title = "Daily 95% MCP Area by Animal",
-    x = "Day",
-    y = "MCP95 area (ha)",
-    color = "Sensor ID"
-  ) +
-  theme_minimal()
+if (nrow(chg_one) > 0) {
+  ggplot(chg_one, aes(x = epoch_to, y = overlap_from_pct, group = 1)) +
+    geom_line(color = "#2ca25f", linewidth = 0.9) +
+    geom_point(color = "#2ca25f", size = 2) +
+    theme_minimal() +
+    labs(
+      title = paste0("Week-to-week overlap (from previous week) for animal ", focal_id),
+      x = "Week",
+      y = "Overlap from previous week (%)"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+} else {
+  message("Not enough weekly epochs for overlap plotting in this subset.")
+}
 ```
 
-## 9) Diurnal feature plots
+## 8b) Helper visualisation functions
 
-`grz_plot_diurnal_metrics()` gives an interpretable view of how movement
-features vary by hour-of-day.
-
-How this works in practice:
-
-- Hour-of-day aggregation is applied per metric and group.
-- Heatmaps highlight temporal structure that is useful for threshold setting.
-
-Common pitfalls and checks:
-
-- Pitfall: timezone mismatch between sensor logging and ecological interpretation.  
-  Check: set and verify timezone assumptions before diurnal plotting.
+### Heatmap helper
 
 ```{r}
 grz_plot_diurnal_metrics(
-  data = gps_social,
-  metrics = c("step_m", "turn_rad"),
-  group_col = "sensor_id",
-  agg_fun = "median",
-  scale = "none"
+    data = gps_move,
+    metrics = c("step_m", "turn_rad"),
+    group_col = "sensor_id",
+    agg_fun = "median",
+    scale = "none"
+  )
+```
+
+### Leaflet helpers (code only)
+
+```{r, eval = FALSE}
+# Playback map
+m <- grz_playback_gps(
+  data = gps_denoised,
+  group = "sensor_id",
+  align = TRUE,
+  align_interval_mins = "base",
+  tail_points = 20,
+  show_points = TRUE,
+  playback_steps = 1000,
+  playback_duration_ms = 12000
 )
 ```
 
-## Next Step
+## 9) Conclusion
 
-Continue to GPS 102 for interactive playback mapping, then GPS 103 for:
+This baseline pipeline gets you to analysis-ready GPS movement, social, and
+spatial metrics while keeping key cleaning decisions transparent.
 
-- timeline playback QA with `grz_playback_gps()`,
-- active/inactive classification,
-- manual state labelling with `grz_label_gps_states()`,
-- and prediction-vs-label validation.
-
-## References
-
-- Sinnott, R. W. (1984). *Virtues of the Haversine*. Sky and Telescope, 68(2), 159.  
-  Distance calculations in `grazer` use the great-circle (haversine) approach.
-- Burt, W. H. (1943). *Territoriality and home range concepts as applied to mammals*.  
-  Journal of Mammalogy, 24(3), 346-352.  
-  Conceptual basis for home-range summaries such as MCP.
+From here, you can extend into more advanced spatial and resource-use analyses
+(for example POI/resource exposure, weekly overlap modelling, and treatment
+comparisons) with a reproducible foundation.
