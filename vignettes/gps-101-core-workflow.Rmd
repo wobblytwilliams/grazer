@@ -36,18 +36,16 @@ It uses the Manbulloo dataset and follows a practical, investigator-led process:
 ## 0) Load packages
 
 ```{r}
-required_pkgs <- c("dplyr", "tidyr", "tibble", "ggplot2", "sf")
-missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
-if (length(missing_pkgs) > 0L) {
-  install.packages(missing_pkgs)
-}
-
 library(grazer)
 library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
-library(sf)
+
+has_sf <- requireNamespace("sf", quietly = TRUE)
+if (has_sf) {
+  library(sf)
+}
 ```
 
 ## 1) Bring in the data
@@ -138,15 +136,20 @@ KML imports commonly expose paddock names in `Name` or `Description`;
 ```{r}
 paddock_path <- file.path("test_data", "paddock.kml")
 
-paddocks_sf <- sf::st_read(paddock_path, quiet = TRUE)
+if (has_sf) {
+  paddocks_sf <- sf::st_read(paddock_path, quiet = TRUE)
 
-gps_spatial <- grz_clean_spatial(
-    data = gps_dedup,
-    paddocks_sf = paddocks_sf,
-    buffer_m = 100,
-    append_paddock = TRUE,
-    verbose = FALSE
-)
+  gps_spatial <- grz_clean_spatial(
+      data = gps_dedup,
+      paddocks_sf = paddocks_sf,
+      buffer_m = 100,
+      append_paddock = TRUE,
+      verbose = FALSE
+  )
+} else {
+  paddocks_sf <- NULL
+  gps_spatial <- gps_dedup
+}
 
 ```
 
@@ -161,36 +164,47 @@ plot_idx <- sample.int(nrow(gps_spatial), max(1L, floor(0.10 * nrow(gps_spatial)
 gps_plot <- gps_spatial[plot_idx, ]
 paddock_buffer_sf <- NULL
 
-paddock_union <- sf::st_union(sf::st_geometry(paddocks_sf))
-ctr <- sf::st_coordinates(sf::st_centroid(paddock_union))
-utm_zone <- floor((ctr[1] + 180) / 6) + 1
-utm_epsg <- if (ctr[2] >= 0) 32600 + utm_zone else 32700 + utm_zone
+if (has_sf && !is.null(paddocks_sf)) {
+  paddock_union <- sf::st_union(sf::st_geometry(paddocks_sf))
+  ctr <- sf::st_coordinates(sf::st_centroid(paddock_union))
+  utm_zone <- floor((ctr[1] + 180) / 6) + 1
+  utm_epsg <- if (ctr[2] >= 0) 32600 + utm_zone else 32700 + utm_zone
 
-paddock_buffer_sf <- paddocks_sf %>%
-  sf::st_transform(utm_epsg) %>%
-  sf::st_buffer(dist = 100) %>%
-  sf::st_transform(4326)
+  paddock_buffer_sf <- paddocks_sf %>%
+    sf::st_transform(utm_epsg) %>%
+    sf::st_buffer(dist = 100) %>%
+    sf::st_transform(4326)
 
-p <- ggplot() +
-  geom_point(
-    data = gps_plot,
-    aes(x = lon, y = lat),
-    alpha = 0.3,
-    size = 0.8,
-    color = "#2b8cbe"
-  ) +
-  theme_minimal() +
-  labs(
-    title = "10% GPS sample with paddock boundary (+100 m buffer)",
-    x = "Longitude",
-    y = "Latitude"
-  )
+  p <- ggplot() +
+    geom_point(
+      data = gps_plot,
+      aes(x = lon, y = lat),
+      alpha = 0.3,
+      size = 0.8,
+      color = "#2b8cbe"
+    ) +
+    theme_minimal() +
+    labs(
+      title = "10% GPS sample with paddock boundary (+100 m buffer)",
+      x = "Longitude",
+      y = "Latitude"
+    )
 
-p <- p +
-   geom_sf(data = paddock_buffer_sf, fill = NA, color = "black", linetype = "22", linewidth = 0.5, inherit.aes = FALSE) +
-   geom_sf(data = paddocks_sf, fill = NA, color = "black", linewidth = 0.6, inherit.aes = FALSE)
+  p <- p +
+     geom_sf(data = paddock_buffer_sf, fill = NA, color = "black", linetype = "22", linewidth = 0.5, inherit.aes = FALSE) +
+     geom_sf(data = paddocks_sf, fill = NA, color = "black", linewidth = 0.6, inherit.aes = FALSE)
 
-p
+  p
+} else {
+  ggplot(gps_plot, aes(x = lon, y = lat)) +
+    geom_point(alpha = 0.3, size = 0.8, color = "#2b8cbe") +
+    theme_minimal() +
+    labs(
+      title = "10% GPS sample (paddock boundary skipped: sf not available)",
+      x = "Longitude",
+      y = "Latitude"
+    )
+}
 ```
 
 ### 3c) Filter extreme speeds
