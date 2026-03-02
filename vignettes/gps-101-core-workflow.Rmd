@@ -56,11 +56,12 @@ To keep runtime practical while still being representative, we subset to:
 ```{r}
 data_file <- file.path("test_data", "ManbullooToSimulate.csv")
 
-gps_raw <- readr::read_csv(data_file)
+gps_raw <- read.csv(data_file)
+
+gps_raw <- gps_raw |> mutate(datetime = as.POSIXct(datetime))
 
 sensor_keep <- sort(unique(gps_raw$sensor_id))
 sensor_keep <- sensor_keep[seq_len(min(15L, length(sensor_keep)))]
-
 
 start_time <- min(gps_raw$datetime, na.rm = TRUE)
 end_time <- start_time + as.difftime(12L, units = "weeks")
@@ -74,7 +75,9 @@ dplyr::glimpse(gps)
 
 ### 1b) Quick interactive map preview (first 4 days)
 
-```{r}
+One for the first things to do when we're using GPS data is to actually look at it. While this sounds basic, you will get to a point of proficiency where you start to skip this step. But, let me assure you, at some point in time you will get caught out if you don't do this step! Grazer has a html-based interactive mapping feature which will render a leaflet map with a timeline to allow you to scrub through your data and zoom in on areas of interest. It will take some time to render. Be patient. Reducing the time period, number of animals, or plotting every nth point will decrease render time.
+
+```{r, eval = FALSE}
 map_4d <- gps %>%
   filter(datetime < min(datetime, na.rm = TRUE) + as.difftime(4, units = "days"))
 
@@ -86,6 +89,10 @@ grz_map(
   warnings = FALSE
 )
 ```
+
+Open the standalone map here: [grz_map_4d.html](grz_map_4d.html)
+
+<iframe src="grz_map_4d.html" width="100%" height="720" style="border: 0;"></iframe>
 
 ## 2) Validate and explain minimum schema
 
