@@ -40,7 +40,6 @@ library(grazer)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(readr)
 library(sf)
 ```
 
@@ -89,10 +88,6 @@ grz_map(
   warnings = FALSE
 )
 ```
-
-Open the standalone map here: [grz_map_4d.html](grz_map_4d.html)
-
-<iframe src="grz_map_4d.html" width="100%" height="720" style="border: 0;"></iframe>
 
 ## 2) Validate and explain minimum schema
 
