@@ -282,7 +282,7 @@ The core idea is:
 
 ## Proposed phase 1 function groups
 
-The starting point should be the function surface that already exists, grouped into a stable GPS workflow:
+The majority of these functions have some level of development in the current version of the package.
 
 | Work area | Likely functions or outputs |
 |---|---|
@@ -292,22 +292,5 @@ The starting point should be the function surface that already exists, grouped i
 | Movement and proximity metrics | movement metrics, social/proximity summaries, POI distance summaries |
 | Spatial summaries | spatial summaries, paddock annotation, home range, home-range change |
 | Activity interpretation | activity-state classification, threshold tuning, validation, labelled workflows |
-| Visualisation | maps, playback, summary plots, diagnostic plots |
+| Visualisation | maps, playback, summary plots?, diagnostic plots? |
 | Example workflows | small package dataset, vignettes, end-to-end examples |
-
-This gives the team something concrete to work against before adding anything new.
-
-## Practical task list
-
-| Stage | Task |
-|---|---|
-| Scope | list all current GPS-related functions and assign them to phase 1 groups |
-| Scope | mark each function as keep, revise, defer, or remove from the phase 1 story |
-| Refinement | align arguments, defaults, naming, and return structures across the kept functions |
-| Refinement | identify any genuinely missing GPS functions needed for a coherent workflow |
-| Tests | build test coverage for the main data and summary functions |
-| Data | replace large vignette dependencies with a small package dataset |
-| Documentation | ensure every exported phase 1 function has clear examples and Rd coverage |
-| Vignettes | revise the GPS vignette set so it tells one coherent package story |
-| Release | run repeated package checks and resolve notes, warnings, and failures |
-| Release | prepare the package for CRAN submission and subsequent R Journal work |
