@@ -136,42 +136,6 @@ Notes on object scope:
 - Spatial layers such as paddocks, POIs, fences, water, and shade should use `sf`.
 - Auxiliary sensor streams such as bolus, GreenFeed, or liveweight should usually still fit within `grz_track`, with a clear schema for `sensor_type`, timestamps, animal linkage, and measured variables. However, there is a potential that movement and behaviour data are separated from other temporal sensor data.
 
-```mermaid
-classDiagram
-  class grz_track {
-    sensor_id
-    datetime
-    lon
-    lat
-    sensor_type
-    metadata (HDOP, sats, fix type, accuracy, ) *These are optional, but carried trough the data munging process.
-  }
-  class grz_epoch {
-    epoch
-    groups
-    metrics
-  }
-  class grz_qc {
-    checks
-    warnings
-    summaries
-  }
-  class grz_model {
-    method
-    features
-    validation
-  }
-  class sf {
-    geometry
-    attributes
-    crs
-  }
-  grz_track --> grz_qc : validate
-  grz_track --> grz_epoch : summarise
-  sf --> grz_track : annotate
-  grz_track --> grz_model : classify
-```
-
 ## Package structure options
 
 There are two ways the ecosystem could develop. At this stage, it's not clear what the best option it. And, there is potential that this changes as the function suite becomes more complex/sophisticated
@@ -263,26 +227,6 @@ Example names across major workflows:
 | Virtual fencing | `grz_vf_read_events()`, `grz_vf_standardise()`, `grz_vf_validate()`, `grz_vf_clean()`, `grz_vf_align()`, `grz_vf_calculate_events()`, `grz_vf_summarise_epochs()`, `grz_vf_classify_response()`, `grz_vf_plot_events()` |
 
 This naming convention results in long function names which might not be a preferred method. Alternatively, the `grz_` prefix could be dropped in favour of the `sensor_verb` naming style.
-
-## Phasing
-
-```mermaid
-gantt
-  title grazer ecosystem phases
-  dateFormat  YYYY-MM-DD
-  axisFormat  %b %Y
-  section Phase 1
-  GPS-focused CRAN package          :p1, 2026-07-15, 90d
-  R Journal package paper           :p1b, after p1, 90d
-  section Phase 2 (stop/go)
-  Virtual fencing prototype         :p2b, after p2a, 60d
-  Accelerometer prototype           :p2c, after p2a, 75d
-  Remote sensing prototype          :p2d, after p2a, 75d
-  Auxiliary sensor handling prototype :p2e, after p2a, 60d
-  section Phase 3
-  Extension package decisions       :p3a, after p2b, 45d
-  Multi-sensor fusion workflows     :p3b, after p3a, 90d
-```
 
 ## Preferred direction
 
