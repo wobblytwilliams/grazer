@@ -118,6 +118,32 @@ mindmap
 | Sensor QC | Data quality across devices and deployments | Missing fixes, irregular intervals, dropout diagnostics, stream completeness summaries |
 | Multi-sensor fusion | Joining GPS, virtual fence, accelerometer, auxiliary sensor, environment, and remote-sensing products | Aligned timelines, modelling tables, reproducible analysis datasets, fused feature sets |
 
+## What to include or omit as features
+
+One of design decisions is not what to build, but what not to build.
+
+The package should add value where livestock workflows are genuinely awkward, repetitive, or hard to standardise. It should avoid recreating tools that are already well solved elsewhere in the R ecosystem.
+
+Principles:
+
+- If a strong, widely used package already solves a problem cleanly, use it rather than wrapping it unnecessarily.
+- Add grazer-specific functions where domain knowledge, repeated workflow pain points, or standardisation needs justify them.
+- Prefer outputs that remain easy for users to inspect, modify, and extend in their own analyses.
+
+Examples of what this means in practice:
+
+- Spatial data should use `sf` directly. Grazer should work with `sf` objects, but it should not create a parallel spatial class or large wrapper layer around `sf`.
+- Plotting should generally use `ggplot2` conventions. It is often better to point users back to `ggplot` rather than to create a large family of rigid plotting wrappers. If a visual is specialised enough to justify package support, it may be better implemented as a `geom_`, a helper that returns plotting data, or a function that returns a modifiable `ggplot` object.
+- Data import functions should be kept minimal at this stage. `readr::read_csv()` and `data.table::fread()` are already sufficient in most cases. Instead of building ingest helpers, the start of the workflow should be a validation step that confirms the required fields, types, ordering, and metadata are present.
+
+Tabular design principles:
+
+- Return `data.frame` objects by default so outputs remain familiar and widely compatible.
+- Use `data.table` internally where it provides clear speed and memory benefits for large livestock datasets.
+- Keep the tabular backend fast, but keep the user-facing outputs simple.
+
+This should help grazer stay focused on domain-specific workflow value rather than expanding into a general-purpose reimplementation of the wider R ecosystem.
+
 ## Shared object system
 
 Returning information in R data frames reduces the barrier for researchers who already work in tidyverse, data.table, or base R workflows. The intent should be to keep the object system as small as possible. Where a good class already exists, it should be used directly rather than wrapped in a new grazer-specific class. In particular, spatial layers should use `sf` directly rather than introducing a separate spatial object.
@@ -233,4 +259,55 @@ This naming convention results in long function names which might not be a prefe
 1. Get `grazer` onto CRAN as a polished GPS package.
 2. Use phase 1 to establish the shared schema, naming style, and pipe-friendly workflow, with a view to expanding.
 3. Treat virtual fencing, accelerometers, remote sensing, auxiliary sensor streams, and fusion as future modules.
-5. Keep the package structure under review, and only move to multiple smaller packages if the ecosystem genuinely needs it.
+4. Keep the package structure under review, and only move to multiple smaller packages if the ecosystem genuinely needs it.
+
+# GPS phase 1 delivery plan
+
+To achieve the CRAN goal, the GPS package should be treated as a scoped delivery project with clear task ownership. The most practical way to organise this is to start from what already exists in `grazer`, stabilise the function set, and then divide the remaining work into parallel streams.
+
+The core idea is:
+
+- define what the GPS package is responsible for in phase 1
+- review the existing function set given the broader ecosystem and identify anything missing
+- then split work into implementation and documentation, and testing and examples.
+
+## Suggested order of work
+
+1. Confirm the phase 1 function set from the current package.
+2. Group those functions into a clear workflow for users.
+3. Identify gaps, overlaps, and functions that are still experimental.
+4. Assign tasks across function refinement & documentation; and, tests, and release preparation.
+5. revise vignettes
+6. Integrate, check, and prepare for CRAN submission.
+
+## Proposed phase 1 function groups
+
+The starting point should be the function surface that already exists, grouped into a stable GPS workflow:
+
+| Work area | Likely functions or outputs |
+|---|---|
+| Input and validation | `grz_validate()`, `grz_validate_gps()`, schema checks, canonical column expectations |
+| Cleaning and QC | duplicate removal, error cleaning, speed filtering, denoising, fix-performance summaries |
+| Alignment and preprocessing | alignment, downsampling, standard GPS preparation steps |
+| Movement and proximity metrics | movement metrics, social/proximity summaries, POI distance summaries |
+| Spatial summaries | spatial summaries, paddock annotation, home range, home-range change |
+| Activity interpretation | activity-state classification, threshold tuning, validation, labelled workflows |
+| Visualisation | maps, playback, summary plots, diagnostic plots |
+| Example workflows | small package dataset, vignettes, end-to-end examples |
+
+This gives the team something concrete to work against before adding anything new.
+
+## Practical task list
+
+| Stage | Task |
+|---|---|
+| Scope | list all current GPS-related functions and assign them to phase 1 groups |
+| Scope | mark each function as keep, revise, defer, or remove from the phase 1 story |
+| Refinement | align arguments, defaults, naming, and return structures across the kept functions |
+| Refinement | identify any genuinely missing GPS functions needed for a coherent workflow |
+| Tests | build test coverage for the main data and summary functions |
+| Data | replace large vignette dependencies with a small package dataset |
+| Documentation | ensure every exported phase 1 function has clear examples and Rd coverage |
+| Vignettes | revise the GPS vignette set so it tells one coherent package story |
+| Release | run repeated package checks and resolve notes, warnings, and failures |
+| Release | prepare the package for CRAN submission and subsequent R Journal work |
