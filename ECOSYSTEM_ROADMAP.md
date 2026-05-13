@@ -30,7 +30,7 @@ The broader ecosystem should be organised around research workflows, not only se
 
 - Where did animals spend time?
 - How far did they move?
-- How did they respond to boundaries, water, shade, pasture, heat, or management?
+- How did they respond to boundaries, water, shade, pasture, heat, or management/feed/mineral?
 - What behaviours were they performing?
 - How reliable were the sensors?
 - How can collar event streams and other animal-linked sensor streams be standardised?
@@ -126,7 +126,7 @@ Returning information in R data frames reduces the barrier for researchers who a
 
 Core object concepts:
 
-- `grz_track`: row-level animal/sensor observations (gps,acc, methane, liveweight, etc.).
+- `grz_track`: row-level animal/sensor observations (gps, acc, methane, liveweight, etc.).
 - `grz_epoch`: summarised data by time window.
 - `grz_qc`: validation and sensor-quality summaries.
 - `grz_model`: fitted classification or prediction objects (if built into grazer).
@@ -198,7 +198,7 @@ Preferred strategy:
 
 Start with one practical package, `grazer`, focused on the GPS and movement workflow for extensively grazed livestock. Only move towards multiple smaller packages plus an aggregation package if there is a clear maintenance, dependency, or user-group reason to do so.
 
-Maintain detailed documentation and vignette's can ensure the applications of the package are clear.
+Maintain detailed documentation and vignettes can ensure the applications of the package are clear.
 
 ## Naming convention
 
@@ -300,7 +300,7 @@ flowchart LR
 
 ## Drill down into phase 1 functions
 
-Review internal and excternal literature and documentation, the following have been proposed as a start point for a gps analysis workflow. The initial focus was to only calculate 1D outputs (speed, tortuosity, etc.), but the decision has been made to expand in some areas, returning polygons, networks, etc. These were considered "basic" requirements for gps analysis in gregarious grazing animals. The following functions have been proposed.
+Review internal and external literature and documentation, the following have been proposed as a start point for a gps analysis workflow. The initial focus was to only calculate 1D outputs (speed, tortuosity, etc.), but the decision has been made to expand in some areas, returning polygons, networks, etc. These were considered "basic" requirements for gps analysis in gregarious grazing animals. The following functions have been proposed.
 
 | Step | Function | One-line description |
 |---|---|---|
@@ -360,16 +360,16 @@ Review internal and excternal literature and documentation, the following have b
 
 # Summary of missing areas
 
-The following summarises methods and analyses tha haven't been include in the core workflow, but may be beneficial to consider while developing frameworks and input/output schemas, or potentially should be pull into the core.
+The following summarises methods and analyses tha haven't been included in the core workflow, but may be beneficial to consider while developing frameworks and input/output schemas, or potentially should be pull into the core.
 
 -High = next to deploy (if requied)
 
 | Method or analysis family | Missing or underdeveloped in current `gps_` list | Suggested priority | Notes | Reference anchors |
 |---|---|---:|---|---|
-| Import and column standardisation | No function to map messy device exports into standard `gps_` column names. | High | Do we have a series of helper functions that convert smartpaddock, ceres, 701x, data into the expected data format? It's not a hard step to do this without the package | |
-| Deployment and animal-sensor metadata | No explicit handling of deployment periods, collar swaps, sensor-animal linkage, treatment groups, or valid study windows. | High |  | |
+| Import and column standardisation | No function to map messy device exports into standard `gps_` column names. | High | Do we have a series of helper functions that convert smartpaddock, ceres, 701x, data into the expected data format? It's not a hard step to do this without the package, RR comment - its not hard but for a beginning user its a roadblock. Its also not hard for us to develop and include it. Only issue is that we will have to update as companies change. | |
+| Deployment and animal-sensor metadata | No explicit handling of deployment periods, collar swaps, sensor-animal linkage, treatment groups, or valid study windows. RR comment - I think this is a high priority. I have a signficiant challenge with this issue and I think most researchers would. | High |  | |
 | Device fix-quality filtering | No explicit function for HDOP, PDOP, satellites, fix type, fix validity, battery, or device-estimated error. | High |  | Agouridis et al. (2004); Ganskopp and Johnson (2007); Gupte et al. (2022) |
-| Static-collar and known-point error checks | No method for evaluating positional error from stationary devices or known-location tests. | Medium |  | Agouridis et al. (2004); Ganskopp and Johnson (2007); Calabrese et al. (2016); Fleming and Calabrese (2023) |
+| Static-collar and known-point error checks | No method for evaluating positional error from stationary devices or known-location tests. | Medium |  | Agouridis et al. (2004); Ganskopp and Johnson (2007); Calabrese et al. (2016); Fleming and Calabrese (2023) | RR comment - some tags/collars make this hard because they go to sleep when stationary.
 | Deployment artefact removal | No explicit function for records collected before fitting, after removal, during collar exchange, in a vehicle, or at a shed. | High |  | |
 | Used/available data for resource selection | Resource-use summaries exist, but not model-ready RSF/SSF/iSSF datasets. | Medium | This is getting more into the datafusion side of `grazer` and should be parked until this point | Signer et al. (2019); `amt` documentation; Wade et al. (2025) |
 | Revisitation and residence time | Resource visits exist, but not a general revisitation/residence-time framework. | Medium |  | Bracis et al. (2018); `recurse` documentation |
@@ -379,3 +379,5 @@ The following summarises methods and analyses tha haven't been include in the co
 | Space-use overlap and change, and site fidelity | No explicit comparison of space-use polygons, utilisation distributions, or repeated use across time. | High | Should be considered  | Signer et al. (2019); `amt` documentation; Vidal-Cardos et al. (2025) |
 | Model-ready design matrices | No general helper for turning GPS outputs into model-ready tables for mixed models, GAMs, RSFs, SSFs, or HMMs. | Medium | The goal is to help people get to modelling. Should we provide helpers to export model ready tables here? or later with data fusion?  |  |
 | Formal reports | `gps_qc_summary()` is the only report | Medium | I hate reports. They never do exactly what I want and never will in their generic nature. I prefer robust tutorials.  | |
+RR comment - might have missed this above - a standard map output would be useful. Heat map or similar, faceted by day, week, month, etc.
+RR comment - some kind of standardized table of "deployment stats and QC" that could become the standard documentation to include in publications. It could become that reviewers come to excpect to the see this standard table in all pubs.
