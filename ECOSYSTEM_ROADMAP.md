@@ -24,30 +24,6 @@ The first release, as a minimum, should cover:
 
 This gives the project a clear first identity: `grazer` is the practical package for GPS-based livestock grazing workflows.
 
-```mermaid
-flowchart LR
-  A[Raw GPS data] ==> B[Validate]
-  B ==> C[Clean]
-  C ==> D[Quality control]
-
-  D ==> E[Movement metrics]
-  D ==> F[Social metrics]
-  D ==> G[Spatial and POI metrics]
-  D ==> H[Activity states]
-
-  E ==> I[Epoch summaries]
-  F ==> I
-  G ==> I
-  H ==> I
-
-  E --> J[Analysis-ready outputs]
-  F --> J
-  G --> J
-  H --> J
-
-  I ==> J
-```
-
 ## Ecosystem vision
 
 The broader ecosystem should be organised around research workflows, not only sensor hardware. Sensors are the inputs, but researchers usually care about questions such as:
@@ -294,3 +270,112 @@ The majority of these functions have some level of development in the current ve
 | Activity interpretation | activity-state classification, threshold tuning, validation, labelled workflows |
 | Visualisation | maps, playback, summary plots?, diagnostic plots? |
 | Example workflows | small package dataset, vignettes, end-to-end examples |
+
+```mermaid
+flowchart LR
+  A[Raw GPS data] ==> B[Validate]
+  B ==> C[Clean]
+  C ==> D[Quality control]
+
+  D ==> E[Movement metrics]
+  D ==> F[Social metrics]
+  D ==> G[Spatial and POI metrics]
+  D ==> H[Activity states]
+
+  E ==> I[Epoch summaries]
+  F ==> I
+  G ==> I
+  H ==> I
+
+  E ==> J[Visualisations]
+  F ==> J
+  G ==> J
+  H ==> J
+
+  J ==> K[Analysis-ready outputs]
+  I ==> K
+  
+```
+
+
+## Drill down into phase 1 functions
+
+Review internal and excternal literature and documentation, the following have been proposed as a start point for a gps analysis workflow. The initial focus was to only calculate 1D outputs (speed, tortuosity, etc.), but the decision has been made to expand in some areas, returning polygons, networks, etc. These were considered "basic" requirements for gps analysis in gregarious grazing animals. The following functions have been proposed.
+
+| Step | Function | One-line description |
+|---|---|---|
+| 1. Validation and pre-clean checks | `gps_validate()` | Check that GPS/GNSS data have the required columns, usable timestamps, valid coordinates, and animal or sensor IDs. |
+|  | `gps_check_intervals()` | Summarise fix intervals, duplicated timestamps, missing fixes, and temporal gaps before cleaning. |
+| | | |
+| 2. Cleaning and quality-control functions | `gps_clean_duplicates()` | Flag or remove duplicate GPS/GNSS records. |
+|  | `gps_clean_errors()` | Flag or remove obvious GPS/GNSS errors, such as invalid coordinates, invalid timestamps, or unusable records. |
+|  | `gps_clean_speed_fixed()` | Remove implausible movements using a user-defined speed or step-distance threshold. |
+|  | `gps_clean_speed_stat()` | Remove unusual movements using statistical thresholds based on the data. |
+|  | `gps_clean_spatial()` | Remove records outside a nominated paddock, property, treatment area, or study boundary. |
+|  | `gps_denoise()` | Remove short-lived GPS/GNSS noise, jumps, or track artefacts using an explicit denoising thresholds or statistical methods. |
+|  | `gps_smooth()` | Fit splines to tracks and re-projeced points as required (only beneficial at high frequency sampling |
+|  | `gps_qc_summary()` | Summarise data quality, missingness, retained records, removed records, and cleaning outcomes. |
+| | | |
+| 3. Movement functions | `gps_steps()` | Derive one row per movement step between consecutive GPS/GNSS fixes. |
+|   | `gps_movement_metrics()` | Summarise step-level movement into distance, speed, displacement, straightness, and activity metrics. |
+| | `gps_turning_metrics()` | Summarise turning angles and path shape from step-level data. |
+|  | `gps_activity_proxy()` | Create simple GPS-derived activity classes or proportions from movement rules. |
+| | | |
+| 4. Social and proximity functions | `gps_proximity()` | Calculate pairwise distances between animals at matched or synchronised times. |
+| | `gps_contacts()` | Detect contact or association events using distance and time rules. |
+| | `gps_nearest_neighbour()` | Identify each animal’s closest neighbour at each time point or epoch. |
+|  | `gps_neighbours_within_range()` | Count the number of animals within a user-defined distance threshold. |
+| | | |
+| 5. Epoch, animal, group, social, and network summaries | `gps_epoch_metrics()` | Summarise GPS/GNSS-derived outputs by repeated time periods such as hour, day, week, or deployment. |
+| | `gps_animal_summary()` | Create one-row-per-animal summaries over a selected period. |
+| | `gps_group_summary()` | Summarise outputs by herd, mob, paddock group, treatment, cohort, or other grouping. |
+| | `gps_diurnal_metrics()` | Summarise movement or other GPS/GNSS metrics by hour of day or day-night period. |
+| | `gps_social_summary()` | Summarise proximity, contact, nearest-neighbour, and neighbours-within-range outputs. |
+| | `gps_network_summary()` | Convert contact or association summaries into network-ready tables or simple network summaries. |
+| | | |
+| 6. Spatial functions | `gps_mcp()` | Calculate minimum convex polygon space-use areas from GPS/GNSS points. |
+|  | `gps_kde()` | Calculate kernel-density-based space-use outputs from GPS/GNSS points. |
+|  | `gps_hotspots()` | Identify high-use areas from GPS/GNSS locations using grid or density approaches. |
+| | | |
+| 7. Resource-use functions | `gps_resource_distance()` | Calculate distance from GPS/GNSS records to resources or landscape features. |
+|  | `gps_resource_use()` | Summarise time, fixes, or proportional use near resources or areas of interest. |
+|  | `gps_resource_visits()` | Detect discrete visits to resources using distance, duration, and gap rules. |
+| | | |
+| 8. Sensitivity-analysis functions | `gps_sens_speed()` | Compare cleaning and movement outputs across alternative speed or distance thresholds. |
+|  | `gps_sens_regularise()` | Compare outputs across alternative fix intervals, time grids, or interpolation rules. |
+|  | `gps_sens_proximity()` | Compare social outputs across alternative proximity thresholds or synchronisation rules. |
+|  | `gps_sens_resource()` | Compare resource-use outputs across alternative buffers, visit rules, or duration thresholds. |
+|  | `gps_sens_space_use()` | Compare space-use outputs across alternative MCP, KDE, contour, grid, or minimum-fix settings. |
+|  | `gps_compare_runs()` | Compare results from two or more cleaning, filtering, regularisation, or analysis runs. |
+| | | |
+| 9. Helper functions | `gps_regularise()` | Align GPS/GNSS records to a regular time grid using existing fixes where possible. |
+|  | `gps_interpolate()` | Estimate GPS/GNSS locations at target times where observed fixes are missing. |
+|  | `gps_downsample()` | Create lower-frequency versions of GPS/GNSS tracks for comparison or sensitivity testing. |
+|  | `gps_gap_summary()` | Summarise missing records, long gaps, expected fixes, observed fixes, and completeness. |
+|  | `gps_append_paddock_names()` | Assign paddock or area identifiers to GPS/GNSS fixes using a spatial overlay. |
+|  | `gps_plot_gps()` | Plot GPS/GNSS points, cleaned records, removed records, and spatial overlays. |
+|  | `gps_playback_gps()` | Create a time-ordered playback of GPS/GNSS locations for visual checking. |
+
+## What is missing from the current `gps_` function set compared with the published literature?
+
+# Summary of missing areas
+
+The following summarises methods and analyses tha haven't been include in the core workflow, but may be beneficial to consider while developing frameworks and input/output schemas, or potentially should be pull into the core.
+
+-High = next to deploy (if requied)
+
+| Method or analysis family | Missing or underdeveloped in current `gps_` list | Suggested priority | Notes | Reference anchors |
+|---|---|---:|---|---|
+| Import and column standardisation | No function to map messy device exports into standard `gps_` column names. | High | Do we have a series of helper functions that convert smartpaddock, ceres, 701x, data into the expected data format? It's not a hard step to do this without the package | |
+| Deployment and animal-sensor metadata | No explicit handling of deployment periods, collar swaps, sensor-animal linkage, treatment groups, or valid study windows. | High |  | |
+| Device fix-quality filtering | No explicit function for HDOP, PDOP, satellites, fix type, fix validity, battery, or device-estimated error. | High |  | Agouridis et al. (2004); Ganskopp and Johnson (2007); Gupte et al. (2022) |
+| Static-collar and known-point error checks | No method for evaluating positional error from stationary devices or known-location tests. | Medium |  | Agouridis et al. (2004); Ganskopp and Johnson (2007); Calabrese et al. (2016); Fleming and Calabrese (2023) |
+| Deployment artefact removal | No explicit function for records collected before fitting, after removal, during collar exchange, in a vehicle, or at a shed. | High |  | |
+| Used/available data for resource selection | Resource-use summaries exist, but not model-ready RSF/SSF/iSSF datasets. | Medium | This is getting more into the datafusion side of `grazer` and should be parked until this point | Signer et al. (2019); `amt` documentation; Wade et al. (2025) |
+| Revisitation and residence time | Resource visits exist, but not a general revisitation/residence-time framework. | Medium |  | Bracis et al. (2018); `recurse` documentation |
+| Advanced dynamic interaction metrics | Proximity and contacts exist, but not formal dyadic interaction indices. | Low to medium |  | Long et al. (2014); `wildlifeDI` documentation; Fielding et al. (2021) |
+| Behaviour-state modelling | HMM/GMM/model-ready behaviour outputs are used sparingly | Low for now | This moves into a much more involve level of analysis. It could be rolled out in this package, but feel it may be better suited to later deployment, or in fusion module  | Ungar et al. (2005); Williams et al. (2016); McClintock and Michelot (2018); `momentuHMM` documentation |
+| Error-aware or autocorrelation-aware home range | MCP and KDE exist, but not AKDE, BBMM, dynamic BBMM, or LoCoH. | Low to medium | How important is it to be all encompassing of higher order spatial analyses? Does this meet the purpose of phase | Horne et al. (2007); Kranstauber et al. (2012); Calabrese et al. (2016); Fleming and Calabrese (2023) |
+| Space-use overlap and change, and site fidelity | No explicit comparison of space-use polygons, utilisation distributions, or repeated use across time. | High | Should be considered  | Signer et al. (2019); `amt` documentation; Vidal-Cardos et al. (2025) |
+| Model-ready design matrices | No general helper for turning GPS outputs into model-ready tables for mixed models, GAMs, RSFs, SSFs, or HMMs. | Medium | The goal is to help people get to modelling. Should we provide helpers to export model ready tables here? or later with data fusion?  |  |
+| Formal reports | `gps_qc_summary()` is the only report | Medium | I hate reports. They never do exactly what I want and never will in their generic nature. I prefer robust tutorials.  | |
