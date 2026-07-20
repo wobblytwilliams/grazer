@@ -1,32 +1,30 @@
 Package: grazer
-Title: Ingest, Clean, and Analyze Cattle GPS Data
-Version: 0.0.0.9000
+Title: Ingest, Clean, and Analyse Cattle GPS Data
+Version: 0.1.0
 Authors@R: 
     person(c("Dr", "Thomas"), "Williams", email = "t.m.williams@cqu.edu.au", role = c("aut", "cre"))
 Description: Lightweight tools for cattle grazing experiments that support
-    GPS data ingestion, cleaning, and basic movement summaries.
+    GPS data ingestion, cleaning, and movement summaries.
 URL: https://github.com/wobblytwilliams/grazer, https://wobblytwilliams.github.io/grazer/
 BugReports: https://github.com/wobblytwilliams/grazer/issues
 License: MIT + file LICENSE
+Depends:
+    R (>= 4.1.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
 Imports:
-    data.table
+    data.table,
+    sf
 Suggests:
     dplyr,
     ggplot2,
-    knitr,
     leaflet,
-    leaflet.extras,
     leaflet.extras2,
     leaftime,
     htmlwidgets,
-    jsonlite,
     readr,
-    rmarkdown,
-    shiny,
-    sf,
+    testthat (>= 3.0.0),
     tibble,
     tidyr
-VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

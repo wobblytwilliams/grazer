@@ -38,15 +38,45 @@ grz_merge_metric_tables <- function(...) {
   }
 
   tbls <- lapply(tbls, function(x) data.table::copy(data.table::as.data.table(x)))
+  if (length(tbls) == 1L) {
+    out <- tbls[[1L]]
+    attr(out, "join_keys") <- intersect(names(out), c(
+      "deployment_id",
+      "animal_id",
+      "sensor_id",
+      "herd_id",
+      "group_id",
+      "paddock",
+      "treatment",
+      "epoch",
+      "epoch_start",
+      "epoch_end",
+      "epoch_mins",
+      "period_type",
+      "period",
+      "date",
+      "hour",
+      "week"
+    ))
+    return(out[])
+  }
 
   candidate_keys <- c(
     "deployment_id",
+    "animal_id",
     "sensor_id",
+    "herd_id",
+    "group_id",
+    "paddock",
+    "treatment",
     "epoch",
+    "epoch_start",
+    "epoch_end",
+    "epoch_mins",
     "period_type",
     "period",
-    "paddock",
     "date",
+    "hour",
     "week"
   )
   common_cols <- Reduce(intersect, lapply(tbls, names))

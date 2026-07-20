@@ -4,10 +4,12 @@
 .Rproj.user/
 .Rcheck/
 *.Rcheck/
-test_data/
 legacy_scripts/
 scripts/
 experimental/
 questions.txt
-
 Rplots.pdf
+
+# Private local validation data
+test_data/
+local_output/

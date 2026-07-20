@@ -1,8 +1,12 @@
 ^legacy_scripts($|/)
 ^test_data($|/)
+^local_output($|/)
+^\.github($|/)
 ^\.vscode($|/)
 ^scripts($|/)
 ^experimental($|/)
-^tests($|/)
 ^questions\.txt$
 ^Rplots\.pdf$
+^ECOSYSTEM_ROADMAP\.md$
+^_pkgdown\.yml$
+^dev($|/)

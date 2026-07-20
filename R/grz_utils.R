@@ -95,7 +95,7 @@ grz_convex_hull_area_ha <- function(lon, lat) {
   }
 
   xy <- grz_lonlat_to_xy_m(lon, lat)
-  hull <- chull(xy$x, xy$y)
+  hull <- grDevices::chull(xy$x, xy$y)
   area_m2 <- grz_polygon_area_m2(xy$x[hull], xy$y[hull])
   area_m2 / 10000
 }
@@ -118,7 +118,7 @@ grz_mcp95_area_ha <- function(lon, lat) {
     return(NA_real_)
   }
 
-  hull <- chull(xy$x[keep], xy$y[keep])
+  hull <- grDevices::chull(xy$x[keep], xy$y[keep])
   area_m2 <- grz_polygon_area_m2(xy$x[keep][hull], xy$y[keep][hull])
   area_m2 / 10000
 }
