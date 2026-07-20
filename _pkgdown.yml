@@ -5,18 +5,10 @@ template:
 
 navbar:
   structure:
-    left: [reference, articles]
+    left: [reference]
     right: [github]
   components:
     github:
       icon: fa-github
       aria-label: GitHub repository
       href: https://github.com/wobblytwilliams/grazer
-
-articles:
-  - title: Tutorials
-    navbar: Tutorials
-    contents:
-      - gps-101-core-workflow
-      - gps-102-playback-gps
-      - gps-103-activity-and-validation
