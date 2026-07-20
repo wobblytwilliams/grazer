@@ -1,11 +1,8 @@
-pandoc: 3.1.11
-pkgdown: 2.2.0
+pandoc: 3.8.3
+pkgdown: 2.2.1
 pkgdown_sha: ~
-articles:
-  gps-101-core-workflow: gps-101-core-workflow.html
-  gps-102-playback-gps: gps-102-playback-gps.html
-  gps-103-activity-and-validation: gps-103-activity-and-validation.html
-last_built: 2026-02-27T23:47Z
+articles: {}
+last_built: 2026-07-20T03:28Z
 urls:
   reference: https://wobblytwilliams.github.io/grazer/reference
   article: https://wobblytwilliams.github.io/grazer/articles
