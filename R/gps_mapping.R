@@ -282,6 +282,17 @@ grz_offset_timeline_layer_control <- function(map, margin_top_px = 44) {
   )
 }
 
+grz_add_layer_deselect_all <- function(map, overlay_groups) {
+  map <- grz_add_timeslider_dependency(map)
+  leaflet::invokeMethod(
+    map,
+    NULL,
+    "addGrazerLayerDeselectAll",
+    as.character(overlay_groups),
+    "Deselect all"
+  )
+}
+
 grz_confirm_continue <- function(stop_message) {
   if (interactive()) {
     proceed <- readline("Do you wish to continue? [y/N]: ")
@@ -673,6 +684,7 @@ gps_map <- function(
       overlayGroups = overlay_layers,
       options = leaflet::layersControlOptions(collapsed = TRUE)
     )
+    map <- grz_add_layer_deselect_all(map, overlay_groups = overlay_layers)
     if (isTRUE(timeline)) {
       map <- grz_offset_timeline_layer_control(map)
     }

@@ -35,9 +35,12 @@ test_that("gps_map creates separate static overlay layers from multiple group co
   methods <- vapply(out$x$calls, function(call) call$method, character(1))
   marker_call <- out$x$calls[[which(methods == "addCircleMarkers")]]
   control_call <- out$x$calls[[which(methods == "addLayersControl")]]
+  deselect_call <- out$x$calls[[which(methods == "addGrazerLayerDeselectAll")]]
 
   expect_setequal(unique(marker_call$args[[5]]), c("A | control", "B | shade"))
   expect_setequal(control_call$args[[2]], c("A | control", "B | shade"))
+  expect_setequal(deselect_call$args[[1]], c("A | control", "B | shade"))
+  expect_identical(deselect_call$args[[2]], "Deselect all")
 })
 
 test_that("gps_map creates switchable animal layers for grouped timelines", {
@@ -166,6 +169,7 @@ test_that("gps_map can omit layer controls", {
   methods <- vapply(out$x$calls, function(call) call$method, character(1))
 
   expect_false("addLayersControl" %in% methods)
+  expect_false("addGrazerLayerDeselectAll" %in% methods)
 })
 
 test_that("gps_playback returns a leaflet widget for a short track", {

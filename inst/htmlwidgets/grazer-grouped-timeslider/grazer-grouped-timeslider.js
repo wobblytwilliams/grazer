@@ -112,3 +112,45 @@ LeafletWidget.methods.offsetGrazerTimelineLayerControl = function(marginTopPx) {
     container.style.marginTop = String(marginTopPx || 44) + "px";
   }, 0);
 };
+
+LeafletWidget.methods.addGrazerLayerDeselectAll = function(overlayGroups, label) {
+  var map = this;
+
+  setTimeout(function() {
+    if (!map.currentLayersControl) {
+      return;
+    }
+    var container = map.currentLayersControl.getContainer();
+    var list = container ? container.querySelector(".leaflet-control-layers-list") : null;
+    if (!list || list.querySelector(".grz-layer-deselect-all")) {
+      return;
+    }
+
+    var separator = L.DomUtil.create("div", "leaflet-control-layers-separator", list);
+    separator.setAttribute("aria-hidden", "true");
+
+    var button = L.DomUtil.create("button", "grz-layer-deselect-all", list);
+    button.type = "button";
+    button.textContent = label || "Deselect all";
+    button.style.display = "block";
+    button.style.width = "100%";
+    button.style.padding = "4px 8px";
+    button.style.border = "1px solid #b5b5b5";
+    button.style.borderRadius = "2px";
+    button.style.background = "#ffffff";
+    button.style.color = "#222222";
+    button.style.cursor = "pointer";
+    button.style.font = "12px/1.4 Arial, Helvetica, sans-serif";
+
+    button.addEventListener("click", function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      overlayGroups.forEach(function(group) {
+        var layer = map.layerManager.getLayerGroup(group, false);
+        if (layer && map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      });
+    });
+  }, 0);
+};
