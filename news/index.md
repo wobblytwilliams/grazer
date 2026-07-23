@@ -23,3 +23,5 @@
   bounds and layer controls.
 - Timeline maps now position the layers control below the scrubber’s
   datetime label so the controls do not overlap.
+- Layer controls now include a `Deselect all` button for hiding every
+  animal and polygon overlay while retaining the base map.
