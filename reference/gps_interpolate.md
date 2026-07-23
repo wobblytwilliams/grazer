@@ -1,9 +1,11 @@
 # Interpolate GPS fixes on a regular time grid
 
-Regularises each animal or sensor stream onto a time grid, assigns
-observed fixes to nearby grid times using `tolerance_mins`, and linearly
-interpolates longitude and latitude for remaining missing expected
-fixes. Interpolation is done within groups only. Use
+Evaluates each animal or sensor stream on a common-phase regular time
+grid. Longitude and latitude are interpolated directly from the
+immediately preceding and following valid raw observations using
+elapsed-time weights. Observations are not snapped to nearby grid times
+and positions are never extrapolated. Interpolation is done within
+groups only. Use
 [`gps_append_segments()`](https://wobblytwilliams.github.io/grazer/reference/gps_append_segments.md)
 before interpolation when large gaps should split a track.
 
@@ -13,7 +15,6 @@ before interpolation when large gaps should split a track.
 gps_interpolate(
   data,
   interval_mins = "base",
-  tolerance_mins = NULL,
   groups = NULL,
   keep_extra = TRUE,
   verbose = TRUE,
@@ -25,28 +26,27 @@ gps_interpolate(
 
 - data:
 
-  Data frame with `sensor_id`, `datetime`, `lon`, and `lat`.
+  Data frame with raw observation rows and `sensor_id`, `datetime`,
+  `lon`, and `lat`. Output from
+  [`gps_regularise()`](https://wobblytwilliams.github.io/grazer/reference/gps_regularise.md)
+  or `gps_interpolate()` is not accepted.
 
 - interval_mins:
 
   Target interval in minutes, or `"base"` to infer the median positive
   observed interval.
 
-- tolerance_mins:
-
-  Tolerance in minutes for assigning observed fixes to the nearest grid
-  time. `NULL` uses half of `interval_mins`. Use `0` for strict exact
-  timestamp matching.
-
 - groups:
 
   Grouping columns for independent streams. Defaults to available
-  `deployment_id`, `animal_id`, and `sensor_id`.
+  `deployment_id`, `animal_id`, `sensor_id`, and `segment_id`. An
+  available `segment_id` is always included so interpolation cannot
+  cross segments.
 
 - keep_extra:
 
-  Logical; keep non-core metadata where exact observations exist and
-  fill columns that are constant within a stream.
+  Logical; retain non-core metadata on exact observations and fill
+  columns that are constant within a stream.
 
 - verbose:
 
@@ -60,5 +60,31 @@ gps_interpolate(
 
 Interpolated GPS data with `is_observed`, `is_interpolated`, and
 `interpolation_gap_s`, `observed_datetime`, and `time_offset_s`. A
-`gps_reg` attribute summarises expected fixes, observed fixes,
-interpolated fixes, gaps, grid offsets, and achieved sampling interval.
+`gps_reg` attribute summarises raw observations, valid anchors, exact
+grid observations, interpolated and unfilled grid rows, gaps, and
+achieved sampling interval.
+
+## Examples
+
+``` r
+gps_interpolate(
+  data.frame(
+    sensor_id = "A",
+    datetime = as.POSIXct("2024-01-01 00:00:00", tz = "UTC") + c(2, 17, 32) * 60,
+    lon = c(150, 150.001, 150.002),
+    lat = c(-30, -30.001, -30.002)
+  ),
+  interval_mins = 15,
+  verbose = FALSE
+)
+#>   sensor_id            datetime      lon       lat is_observed is_interpolated
+#> 1         A 2024-01-01 00:00:00       NA        NA       FALSE           FALSE
+#> 2         A 2024-01-01 00:15:00 150.0009 -30.00087       FALSE            TRUE
+#> 3         A 2024-01-01 00:30:00 150.0019 -30.00187       FALSE            TRUE
+#> 4         A 2024-01-01 00:45:00       NA        NA       FALSE           FALSE
+#>   observed_datetime time_offset_s interpolation_gap_s
+#> 1              <NA>            NA                  NA
+#> 2              <NA>            NA                 900
+#> 3              <NA>            NA                 900
+#> 4              <NA>            NA                  NA
+```

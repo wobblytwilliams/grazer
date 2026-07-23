@@ -27,7 +27,10 @@ gps_turning(
 
   Grouping columns for step calculations. Defaults to `deployment_id`
   and `sensor_id` when `deployment_id` is present, otherwise
-  `sensor_id`.
+  `sensor_id`. When `segment_id` is present it is always used to prevent
+  steps across segment boundaries. `cum_distance_m` carries forward
+  between segments within the requested track groups without adding a
+  gap step.
 
 - unit:
 

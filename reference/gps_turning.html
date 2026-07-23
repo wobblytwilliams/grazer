@@ -61,7 +61,9 @@ within each group.</p>
 <dt id="arg-groups">groups<a class="anchor" aria-label="anchor" href="#arg-groups"></a></dt>
 <dd><p>Grouping columns for step calculations. Defaults to
 <code>deployment_id</code> and <code>sensor_id</code> when <code>deployment_id</code> is present, otherwise
-<code>sensor_id</code>.</p></dd>
+<code>sensor_id</code>. When <code>segment_id</code> is present it is always used to prevent
+steps across segment boundaries. <code>cum_distance_m</code> carries forward between
+segments within the requested track groups without adding a gap step.</p></dd>
 
 
 <dt id="arg-unit">unit<a class="anchor" aria-label="anchor" href="#arg-unit"></a></dt>
