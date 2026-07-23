@@ -330,118 +330,298 @@ gps_regularise <- function(
   )
 }
 
-grz_interpolate_group <- function(sub, max_gap_sec) {
+grz_interpolation_group_cols <- function(data, groups = NULL) {
+  out <- grz_time_group_cols(data, groups = groups, fun_name = "gps_interpolate()")
+  if ("segment_id" %in% names(data) && !"segment_id" %in% out) {
+    out <- c(out, "segment_id")
+  }
+  unique(out)
+}
+
+grz_interpolation_anchors <- function(data, groups) {
+  anchors <- data.table::copy(data)
+  anchors[, .grz_valid_coord := grz_gps_valid_coord(anchors, fun_name = "gps_interpolate()")]
+  anchors <- anchors[.grz_valid_coord %in% TRUE]
+  data.table::setorderv(anchors, c(groups, "datetime", ".grz_row_id"))
+  anchors <- unique(anchors, by = c(groups, "datetime"))
+  anchors[, .grz_valid_coord := NULL]
+  anchors[]
+}
+
+grz_interpolate_raw_group <- function(sub, groups, interval_sec, keep_extra) {
   sub <- data.table::copy(sub)
-  data.table::setorderv(sub, "datetime")
-  sub[, is_interpolated := FALSE]
-  sub[, interpolation_gap_s := NA_real_]
+  data.table::setorderv(sub, c("datetime", ".grz_row_id"))
 
-  anchors <- sub[is_observed %in% TRUE & is.finite(lon) & is.finite(lat)]
-  anchors <- unique(anchors, by = "datetime")
-  if (nrow(anchors) < 2L) {
-    return(sub[])
+  t_all <- as.numeric(sub$datetime)
+  grid_start <- floor(min(t_all) / interval_sec) * interval_sec
+  grid_end <- ceiling(max(t_all) / interval_sec) * interval_sec
+  t_grid <- seq(grid_start, grid_end, by = interval_sec)
+
+  anchors <- grz_interpolation_anchors(sub, groups = groups)
+  anchors[, .grz_grid_time := as.numeric(datetime)]
+  exact <- anchors[.grz_grid_time %in% t_grid]
+
+  generated_cols <- c(
+    groups,
+    ".grz_row_id",
+    ".grz_grid_time",
+    "datetime",
+    "lon",
+    "lat",
+    "observed_datetime",
+    "time_offset_s",
+    "is_observed",
+    "is_interpolated",
+    "interpolation_gap_s"
+  )
+  extra_cols <- if (isTRUE(keep_extra)) setdiff(names(sub), generated_cols) else character()
+  exact_cols <- unique(c(".grz_grid_time", "datetime", "lon", "lat", ".grz_row_id", extra_cols))
+  exact <- exact[, ..exact_cols]
+  data.table::setnames(exact, "datetime", "observed_datetime")
+
+  out <- merge(
+    data.table::data.table(.grz_grid_time = t_grid),
+    exact,
+    by = ".grz_grid_time",
+    all.x = TRUE,
+    sort = TRUE
+  )
+  out[, datetime := as.POSIXct(.grz_grid_time, origin = "1970-01-01", tz = "UTC")]
+  out[, is_observed := !is.na(observed_datetime)]
+  out[, time_offset_s := data.table::fifelse(is_observed, 0, NA_real_)]
+  out[, is_interpolated := FALSE]
+  out[, interpolation_gap_s := NA_real_]
+
+  for (group in groups) {
+    out[, (group) := sub[[group]][1L]]
   }
 
-  t_grid <- as.numeric(sub$datetime)
-  t_obs <- as.numeric(anchors$datetime)
-  prev_idx <- findInterval(t_grid, t_obs)
-  next_idx <- prev_idx + 1L
-  can_fill <- !(sub$is_observed %in% TRUE) & prev_idx >= 1L & next_idx <= length(t_obs)
-  gap_s <- rep(NA_real_, length(t_grid))
-  gap_s[can_fill] <- t_obs[next_idx[can_fill]] - t_obs[prev_idx[can_fill]]
-  can_fill <- can_fill & is.finite(gap_s) & gap_s <= max_gap_sec
+  if (nrow(anchors) >= 2L) {
+    t_anchor <- as.numeric(anchors$datetime)
+    t_out <- as.numeric(out$datetime)
+    previous <- findInterval(t_out, t_anchor)
+    following <- previous + 1L
+    can_interpolate <- !out$is_observed & previous >= 1L & following <= length(t_anchor)
 
-  if (!any(can_fill)) {
-    return(sub[])
+    if (any(can_interpolate)) {
+      rows <- which(can_interpolate)
+      previous_time <- t_anchor[previous[rows]]
+      following_time <- t_anchor[following[rows]]
+      gap_s <- following_time - previous_time
+      weight <- (t_out[rows] - previous_time) / gap_s
+      lon_value <- anchors$lon[previous[rows]] + weight * (anchors$lon[following[rows]] - anchors$lon[previous[rows]])
+      lat_value <- anchors$lat[previous[rows]] + weight * (anchors$lat[following[rows]] - anchors$lat[previous[rows]])
+      usable <- is.finite(gap_s) & gap_s > 0 & is.finite(lon_value) & is.finite(lat_value)
+      fill_rows <- rows[usable]
+
+      if (length(fill_rows) > 0L) {
+        data.table::set(out, i = fill_rows, j = "lon", value = lon_value[usable])
+        data.table::set(out, i = fill_rows, j = "lat", value = lat_value[usable])
+        data.table::set(out, i = fill_rows, j = "is_interpolated", value = TRUE)
+        data.table::set(out, i = fill_rows, j = "interpolation_gap_s", value = gap_s[usable])
+      }
+    }
   }
 
-  lon_interp <- stats::approx(x = t_obs, y = anchors$lon, xout = t_grid[can_fill], method = "linear", rule = 1, ties = "ordered")$y
-  lat_interp <- stats::approx(x = t_obs, y = anchors$lat, xout = t_grid[can_fill], method = "linear", rule = 1, ties = "ordered")$y
-  candidate_rows <- which(can_fill)
-  ok_interp <- is.finite(lon_interp) & is.finite(lat_interp)
-  fill_rows <- candidate_rows[ok_interp]
-  if (length(fill_rows) == 0L) {
-    return(sub[])
-  }
+  out <- grz_fill_constant_metadata(
+    out,
+    source = sub,
+    skip_cols = c(
+      groups,
+      "datetime",
+      "observed_datetime",
+      "lon",
+      "lat",
+      "time_offset_s",
+      "is_observed",
+      "is_interpolated",
+      "interpolation_gap_s"
+    )
+  )
+  out[, .grz_row_id := NULL]
+  out[, .grz_grid_time := NULL]
+  data.table::setcolorder(
+    out,
+    c(
+      groups,
+      "datetime",
+      "lon",
+      "lat",
+      "is_observed",
+      "is_interpolated",
+      "observed_datetime",
+      "time_offset_s",
+      "interpolation_gap_s",
+      setdiff(
+        names(out),
+        c(groups, "datetime", "lon", "lat", "is_observed", "is_interpolated", "observed_datetime", "time_offset_s", "interpolation_gap_s")
+      )
+    )
+  )
+  out[]
+}
 
-  data.table::set(sub, i = fill_rows, j = "lon", value = lon_interp[ok_interp])
-  data.table::set(sub, i = fill_rows, j = "lat", value = lat_interp[ok_interp])
-  data.table::set(sub, i = fill_rows, j = "is_interpolated", value = TRUE)
-  data.table::set(sub, i = fill_rows, j = "interpolation_gap_s", value = gap_s[fill_rows])
-  sub[]
+grz_interpolation_diagnostics <- function(out, observed, anchors, groups, interval_sec, n_missing_datetime) {
+  observed_counts <- data.table::copy(observed)
+  observed_counts[, .grz_valid_coord := grz_gps_valid_coord(observed_counts, fun_name = "gps_interpolate()")]
+  observed_counts <- observed_counts[, list(
+    n_observed_fixes = .N,
+    n_observed_timestamps = data.table::uniqueN(datetime),
+    n_duplicate_timestamps = .N - data.table::uniqueN(datetime),
+    n_invalid_coordinate_fixes = sum(!.grz_valid_coord)
+  ), by = groups]
+
+  anchor_counts <- anchors[, list(n_valid_anchor_timestamps = .N), by = groups]
+  expected <- out[, list(
+    n_expected_fixes = .N,
+    n_observed_on_grid = sum(is_observed %in% TRUE, na.rm = TRUE),
+    n_interpolated = sum(is_interpolated %in% TRUE, na.rm = TRUE),
+    n_unfilled_grid_fixes = sum(!is.finite(lon) | !is.finite(lat))
+  ), by = groups]
+
+  sampling <- data.table::copy(out)
+  data.table::setorderv(sampling, c(groups, "datetime"))
+  sampling[, .grz_dt_s := as.numeric(datetime - data.table::shift(datetime), units = "secs"), by = groups]
+  sampling <- sampling[, list(
+    sampling_interval_target_s = as.numeric(interval_sec),
+    sampling_interval_achieved_s = if (any(is.finite(.grz_dt_s) & .grz_dt_s > 0)) stats::median(.grz_dt_s[is.finite(.grz_dt_s) & .grz_dt_s > 0]) else NA_real_
+  ), by = groups]
+
+  gaps <- grz_observed_gap_summary(anchors, groups = groups)
+  diagnostics <- Reduce(
+    function(x, y) merge(x, y, by = groups, all = TRUE, sort = FALSE),
+    list(expected, observed_counts, anchor_counts, gaps, sampling)
+  )
+  diagnostics[is.na(n_valid_anchor_timestamps), n_valid_anchor_timestamps := 0L]
+  diagnostics[is.na(n_invalid_coordinate_fixes), n_invalid_coordinate_fixes := 0L]
+  diagnostics[, prop_interpolated := n_interpolated / n_expected_fixes]
+  diagnostics[, n_missing_datetime := as.integer(n_missing_datetime)]
+  data.table::setcolorder(
+    diagnostics,
+    c(
+      groups,
+      "n_expected_fixes",
+      "n_observed_fixes",
+      "n_observed_timestamps",
+      "n_valid_anchor_timestamps",
+      "n_observed_on_grid",
+      "n_interpolated",
+      "n_unfilled_grid_fixes",
+      "prop_interpolated",
+      "n_duplicate_timestamps",
+      "n_invalid_coordinate_fixes",
+      "n_missing_datetime",
+      "n_observed_gaps",
+      "gap_min_s",
+      "gap_median_s",
+      "gap_max_s",
+      "sampling_interval_target_s",
+      "sampling_interval_achieved_s"
+    )
+  )
+  diagnostics[]
 }
 
 #' Interpolate GPS fixes on a regular time grid
 #'
-#' Regularises each animal or sensor stream onto a time grid, assigns observed
-#' fixes to nearby grid times using `tolerance_mins`, and linearly interpolates
-#' longitude and latitude for remaining missing expected fixes. Interpolation is
-#' done within groups only. Use `gps_append_segments()` before interpolation
-#' when large gaps should split a track.
+#' Evaluates each animal or sensor stream on a common-phase regular time grid.
+#' Longitude and latitude are interpolated directly from the immediately
+#' preceding and following valid raw observations using elapsed-time weights.
+#' Observations are not snapped to nearby grid times and positions are never
+#' extrapolated. Interpolation is done within groups only. Use
+#' `gps_append_segments()` before interpolation when large gaps should split a
+#' track.
 #'
-#' @inheritParams gps_regularise
+#' @param data Data frame with raw observation rows and `sensor_id`, `datetime`,
+#'   `lon`, and `lat`. Output from `gps_regularise()` or `gps_interpolate()` is
+#'   not accepted.
+#' @param interval_mins Target interval in minutes, or `"base"` to infer the
+#'   median positive observed interval.
+#' @param groups Grouping columns for independent streams. Defaults to available
+#'   `deployment_id`, `animal_id`, `sensor_id`, and `segment_id`. An available
+#'   `segment_id` is always included so interpolation cannot cross segments.
+#' @param keep_extra Logical; retain non-core metadata on exact observations and
+#'   fill columns that are constant within a stream.
+#' @param verbose Logical; print a short summary.
+#' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
 #'
 #' @return Interpolated GPS data with `is_observed`, `is_interpolated`, and
 #'   `interpolation_gap_s`, `observed_datetime`, and `time_offset_s`. A
-#'   `gps_reg` attribute summarises expected fixes, observed fixes, interpolated
-#'   fixes, gaps, grid offsets, and achieved sampling interval.
+#'   `gps_reg` attribute summarises raw observations, valid anchors, exact grid
+#'   observations, interpolated and unfilled grid rows, gaps, and achieved
+#'   sampling interval.
+#' @examples
+#' gps_interpolate(
+#'   data.frame(
+#'     sensor_id = "A",
+#'     datetime = as.POSIXct("2024-01-01 00:00:00", tz = "UTC") + c(2, 17, 32) * 60,
+#'     lon = c(150, 150.001, 150.002),
+#'     lat = c(-30, -30.001, -30.002)
+#'   ),
+#'   interval_mins = 15,
+#'   verbose = FALSE
+#' )
 #' @export
 gps_interpolate <- function(
   data,
   interval_mins = "base",
-  tolerance_mins = NULL,
   groups = NULL,
   keep_extra = TRUE,
   verbose = TRUE,
   return_class = c("data.frame", "data.table")
 ) {
+  grz_require_flag(keep_extra, "keep_extra")
   rc <- grz_match_output_class(return_class)
+  if (all(c("is_observed", "observed_datetime", "time_offset_s") %in% names(data))) {
+    stop("`gps_interpolate()` requires raw observation rows, not regularised or interpolated grid output.", call. = FALSE)
+  }
 
   dt_raw <- grz_prepare_clean_dt(data, require_core = TRUE)
-  if ("is_observed" %in% names(dt_raw)) {
-    dt_raw <- dt_raw[is_observed %in% TRUE]
-  }
-  grp <- grz_time_group_cols(dt_raw, groups = groups, fun_name = "gps_interpolate()")
+  grp <- grz_interpolation_group_cols(dt_raw, groups = groups)
   interval_resolved <- grz_resolve_interval_mins(dt_raw, groups = grp, interval_mins = interval_mins)
-  tolerance_resolved <- grz_resolve_tolerance_mins(tolerance_mins, interval_mins = interval_resolved)
   interval_sec <- grz_mins_to_sec(interval_resolved, "interval_mins")
-  tolerance_sec <- grz_tolerance_to_sec(tolerance_resolved)
 
-  regular <- data.table::as.data.table(gps_regularise(
-    dt_raw,
-    interval_mins = interval_resolved,
-    tolerance_mins = tolerance_resolved,
-    groups = grp,
-    keep_extra = keep_extra,
-    verbose = FALSE,
-    return_class = "data.table"
-  ))
-  split_idx <- split(seq_len(nrow(regular)), interaction(regular[, ..grp], drop = TRUE, lex.order = TRUE))
+  dt_raw[, .grz_row_id := .I]
+  n_missing_datetime <- sum(is.na(dt_raw$datetime))
+  observed <- dt_raw[!is.na(datetime)]
+  if (nrow(observed) == 0L) {
+    stop("`data` must contain at least one valid `datetime`.", call. = FALSE)
+  }
+
+  split_idx <- split(seq_len(nrow(observed)), interaction(observed[, ..grp], drop = TRUE, lex.order = TRUE))
   out <- data.table::rbindlist(
-    lapply(split_idx, function(i) grz_interpolate_group(regular[i], max_gap_sec = Inf)),
+    lapply(split_idx, function(i) {
+      grz_interpolate_raw_group(observed[i], groups = grp, interval_sec = interval_sec, keep_extra = keep_extra)
+    }),
     use.names = TRUE,
     fill = TRUE
   )
   data.table::setorderv(out, c(grp, "datetime"))
 
-  observed <- data.table::copy(dt_raw)
-  observed[, .grz_row_id := .I]
-  observed <- observed[!is.na(datetime)]
-  diagnostics <- grz_temporal_diagnostics(out, observed = observed, groups = grp, interval_sec = interval_sec, tolerance_sec = tolerance_sec, n_missing_datetime = sum(is.na(dt_raw$datetime)))
+  anchors <- grz_interpolation_anchors(observed, groups = grp)
+  diagnostics <- grz_interpolation_diagnostics(
+    out,
+    observed = observed,
+    anchors = anchors,
+    groups = grp,
+    interval_sec = interval_sec,
+    n_missing_datetime = n_missing_datetime
+  )
 
   if (isTRUE(verbose)) {
     cat(sprintf(
-      "[gps_interpolate] interval_mins=%s tolerance_mins=%s interpolated=%s\n",
+      "[gps_interpolate] interval_mins=%s observed_on_grid=%s interpolated=%s unfilled=%s\n",
       format(interval_resolved, trim = TRUE),
-      format(tolerance_resolved, trim = TRUE),
-      format(sum(out$is_interpolated), big.mark = ",")
+      format(sum(out$is_observed), big.mark = ","),
+      format(sum(out$is_interpolated), big.mark = ","),
+      format(sum(!is.finite(out$lon) | !is.finite(out$lat)), big.mark = ",")
     ))
   }
 
   grz_finish_temporal(
     out,
     diagnostics = diagnostics,
-    parameters = list(interval_mins = interval_resolved, tolerance_mins = tolerance_resolved, keep_extra = keep_extra),
+    parameters = list(interval_mins = interval_resolved, keep_extra = keep_extra, interpolation_method = "linear_raw_time"),
     return_class = rc
   )
 }

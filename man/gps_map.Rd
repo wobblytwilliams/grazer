@@ -14,6 +14,15 @@ gps_map(
   state_colors = c(inactive = "#d7191c", active = "#1a9641"),
   state_legend_title = "State",
   timeline = FALSE,
+  polygons_sf = NULL,
+  polygon_label_col = NULL,
+  polygon_group = "Polygons",
+  polygon_color = "#03F",
+  polygon_weight = 5,
+  polygon_opacity = 0.5,
+  polygon_fill = TRUE,
+  polygon_fill_opacity = 0.2,
+  layer_control = TRUE,
   popup_fields = c("sensor_id", "datetime"),
   provider = "Esri.WorldImagery",
   point_radius = 3,
@@ -35,7 +44,8 @@ gps_map(
 
 \item{datetime}{Name of datetime column.}
 
-\item{groups}{Optional grouping columns for colour and layer separation.}
+\item{groups}{Optional grouping columns for colour and layer separation.
+Multiple columns are combined into labels separated by \code{" | "}.}
 
 \item{state_col}{Optional state column for fixed state coloring (for
 example \code{activity_state_gmm}).}
@@ -46,6 +56,26 @@ example \code{activity_state_gmm}).}
 \item{state_legend_title}{Legend title used when \code{state_col} is provided.}
 
 \item{timeline}{Logical; if \code{TRUE}, render points with an interactive time slider.}
+
+\item{polygons_sf}{Optional \code{sf} object containing polygon or multipolygon
+geometries. Any declared CRS is accepted and transformed to EPSG:4326.}
+
+\item{polygon_label_col}{Optional column in \code{polygons_sf} used for labels.}
+
+\item{polygon_group}{Layer-control name for all polygon features.}
+
+\item{polygon_color}{Polygon border colour.}
+
+\item{polygon_weight}{Polygon border weight.}
+
+\item{polygon_opacity}{Polygon border opacity.}
+
+\item{polygon_fill}{Logical; fill polygons.}
+
+\item{polygon_fill_opacity}{Polygon fill opacity.}
+
+\item{layer_control}{Logical; add on/off controls for grouped animals and
+polygon overlays.}
 
 \item{popup_fields}{Character vector of fields to show in marker popups.}
 
@@ -71,6 +101,17 @@ example \code{activity_state_gmm}).}
 A \code{leaflet} htmlwidget.
 }
 \description{
-Creates a leaflet map of GPS fixes with optional grouping and optional
-timeline playback via \code{leaflet.extras2}.
+Creates a leaflet map of GPS fixes with optional switchable group layers,
+polygon overlays, and timeline playback.
+}
+\examples{
+\dontrun{
+gps_map(
+  gps_data,
+  groups = c("animal_id", "treatment"),
+  polygons_sf = paddocks,
+  polygon_label_col = "paddock_name",
+  polygon_group = "Paddocks"
+)
+}
 }

@@ -24,7 +24,9 @@ fixed-duration \code{"interval"} epochs anchored to Unix time in UTC.}
 
 \item{groups}{Grouping columns for step calculations. Defaults to
 \code{deployment_id} and \code{sensor_id} when \code{deployment_id} is present, otherwise
-\code{sensor_id}.}
+\code{sensor_id}. When \code{segment_id} is present it is always used to prevent
+steps across segment boundaries. \code{cum_distance_m} carries forward between
+segments within the requested track groups without adding a gap step.}
 
 \item{verbose}{Logical; print a short summary.}
 

@@ -532,13 +532,14 @@ gps_regularised |>
 attr(gps_regularised, "gps_reg")
 
 # gps_interpolate()
-# First matches observed fixes to the same kind of regular grid used by
-# gps_regularise(). It then fills missing grid rows with straight-line
-# interpolation between observed fixes inside each segment.
+# Builds a common-phase time grid, then estimates positions at the exact grid
+# times from the immediately preceding and following raw fixes. Unlike
+# gps_regularise(), it does not snap a nearby fix onto a grid time. Exact raw
+# fixes are retained, positions are never extrapolated, and segment boundaries
+# prevent interpolation across known large gaps.
 gps_interpolated <- gps_interpolate(
   speed_fixed_dropped,
   interval_mins = 20,
-  tolerance_mins = NULL,
   groups = "segment_id",
   keep_extra = TRUE,
   verbose = FALSE
@@ -581,6 +582,9 @@ attr(gps_40min, "gps_reg")
 # gps_steps()
 # Row-level movement: step distance, speed, bearing, turn angle.
 # A step is the line formed between two gps fixes.
+# When segment_id is present, the first row of each segment has no step. The
+# cumulative distance carries forward from the previous segment for the same
+# sensor, but no distance is added for the unobserved gap.
 
 gps_step_rows <- gps_steps(
   gps_cleaned,
@@ -640,7 +644,6 @@ movement_day |>
 gps_social_aligned <- gps_interpolate(
   gps_cleaned,
   interval_mins = 20,
-  tolerance_mins = NULL,
   groups = "segment_id",
   keep_extra = TRUE,
   verbose = FALSE
@@ -1031,7 +1034,10 @@ if (has_leaflet) {
   # Use a subset first. Full collar datasets can be large in the viewer.
   map_widget <- gps_map(
     gps_cleaned |> filter(datetime <= min(datetime, na.rm = TRUE) + as.difftime(12, units = "hours")),
-    groups = "sensor_id",
+    groups = c("sensor_id", "treatment"),
+    polygons_sf = paddocks_sf,
+    polygon_label_col = "paddock_name",
+    polygon_group = "Paddocks",
     popup_fields = c("sensor_id", "animal_id", "datetime"),
     max_points = 500,
     warnings = FALSE

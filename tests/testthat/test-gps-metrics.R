@@ -52,6 +52,27 @@ test_that("gps_steps keeps streams independent", {
   expect_true(all(is.na(first_rows$speed_mps)))
 })
 
+test_that("gps_steps suppresses gap steps and carries cumulative distance across segments", {
+  t0 <- as.POSIXct("2024-01-01 00:00:00", tz = "UTC")
+  dat <- data.frame(
+    sensor_id = "A",
+    segment_id = c("A_seg001", "A_seg001", "A_seg002", "A_seg002"),
+    datetime = t0 + c(0, 60, 3600, 3660),
+    lon = c(0, 0.001, 1, 1.001),
+    lat = 0,
+    stringsAsFactors = FALSE
+  )
+
+  out <- gps_steps(dat, groups = "segment_id", verbose = FALSE)
+
+  expect_true(is.na(out$step_m[3]))
+  expect_true(is.na(out$speed_mps[3]))
+  expect_true(is.na(out$bearing_deg[3]))
+  expect_equal(out$cum_distance_m[3], out$cum_distance_m[2])
+  expect_equal(out$cum_distance_m[4], out$cum_distance_m[2] + out$step_m[4])
+  expect_equal(out$net_displacement_m[c(1, 3)], c(0, 0))
+})
+
 test_that("gps_turning can return degrees", {
   out <- gps_turning(gps_fixture()[1:4, ], unit = "degrees", verbose = FALSE)
 

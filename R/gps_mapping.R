@@ -189,6 +189,77 @@ grz_validate_map_inputs <- function(data, lon, lat, datetime, groups, state_col 
   }
 }
 
+grz_prepare_map_polygons <- function(polygons_sf, polygon_label_col) {
+  if (is.null(polygons_sf)) {
+    return(NULL)
+  }
+  if (!inherits(polygons_sf, "sf")) {
+    stop("`polygons_sf` must be an sf object.", call. = FALSE)
+  }
+  if (nrow(polygons_sf) < 1L) {
+    stop("`polygons_sf` must contain at least one polygon.", call. = FALSE)
+  }
+  if (is.na(sf::st_crs(polygons_sf))) {
+    stop("`polygons_sf` must have a declared coordinate reference system (CRS).", call. = FALSE)
+  }
+  geometry_types <- unique(as.character(sf::st_geometry_type(polygons_sf, by_geometry = TRUE)))
+  unsupported <- setdiff(geometry_types, c("POLYGON", "MULTIPOLYGON"))
+  if (length(unsupported) > 0L) {
+    stop(
+      "`polygons_sf` must contain only POLYGON or MULTIPOLYGON geometries; found: ",
+      paste(unsupported, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+  if (any(sf::st_is_empty(polygons_sf))) {
+    stop("`polygons_sf` contains empty geometries.", call. = FALSE)
+  }
+  geometry_valid <- sf::st_is_valid(polygons_sf)
+  if (any(is.na(geometry_valid)) || any(!geometry_valid)) {
+    stop("`polygons_sf` contains invalid polygon geometries.", call. = FALSE)
+  }
+  if (!is.null(polygon_label_col)) {
+    if (!is.character(polygon_label_col) || length(polygon_label_col) != 1L ||
+        is.na(polygon_label_col) || trimws(polygon_label_col) == "") {
+      stop("`polygon_label_col` must be NULL or a single non-empty column name.", call. = FALSE)
+    }
+    if (!polygon_label_col %in% names(polygons_sf)) {
+      stop("`polygon_label_col` was not found in `polygons_sf`.", call. = FALSE)
+    }
+  }
+
+  tryCatch(
+    sf::st_transform(polygons_sf, 4326),
+    error = function(e) {
+      stop("`polygons_sf` could not be transformed to WGS84 (EPSG:4326): ", conditionMessage(e), call. = FALSE)
+    }
+  )
+}
+
+grz_grouped_timeslider_dependency <- function() {
+  htmltools::htmlDependency(
+    name = "grazer-grouped-timeslider",
+    version = "0.1.0",
+    src = c(file = "htmlwidgets/grazer-grouped-timeslider"),
+    package = "grazer",
+    script = "grazer-grouped-timeslider.js"
+  )
+}
+
+grz_add_grouped_timeslider <- function(map, times, layer_ids, groups) {
+  map$dependencies <- c(map$dependencies, list(grz_grouped_timeslider_dependency()))
+  leaflet::invokeMethod(
+    map,
+    NULL,
+    "addGrazerGroupedTimeslider",
+    as.character(times),
+    as.character(layer_ids),
+    as.character(groups),
+    list(position = "topright", range = TRUE, showAllOnStart = TRUE)
+  )
+}
+
 grz_confirm_continue <- function(stop_message) {
   if (interactive()) {
     proceed <- readline("Do you wish to continue? [y/N]: ")
@@ -203,20 +274,32 @@ grz_confirm_continue <- function(stop_message) {
 
 #' Map GPS fixes interactively
 #'
-#' Creates a leaflet map of GPS fixes with optional grouping and optional
-#' timeline playback via `leaflet.extras2`.
+#' Creates a leaflet map of GPS fixes with optional switchable group layers,
+#' polygon overlays, and timeline playback.
 #'
 #' @param data Data frame containing GPS points.
 #' @param lon Name of longitude column.
 #' @param lat Name of latitude column.
 #' @param datetime Name of datetime column.
 #' @param groups Optional grouping columns for colour and layer separation.
+#'   Multiple columns are combined into labels separated by `" | "`.
 #' @param state_col Optional state column for fixed state coloring (for
 #'   example `activity_state_gmm`).
 #' @param state_colors Named colors for state levels. Defaults to red
 #'   (`inactive`) and green (`active`).
 #' @param state_legend_title Legend title used when `state_col` is provided.
 #' @param timeline Logical; if `TRUE`, render points with an interactive time slider.
+#' @param polygons_sf Optional `sf` object containing polygon or multipolygon
+#'   geometries. Any declared CRS is accepted and transformed to EPSG:4326.
+#' @param polygon_label_col Optional column in `polygons_sf` used for labels.
+#' @param polygon_group Layer-control name for all polygon features.
+#' @param polygon_color Polygon border colour.
+#' @param polygon_weight Polygon border weight.
+#' @param polygon_opacity Polygon border opacity.
+#' @param polygon_fill Logical; fill polygons.
+#' @param polygon_fill_opacity Polygon fill opacity.
+#' @param layer_control Logical; add on/off controls for grouped animals and
+#'   polygon overlays.
 #' @param popup_fields Character vector of fields to show in marker popups.
 #' @param provider Tile provider name passed to `leaflet::addProviderTiles()`.
 #' @param point_radius Marker radius.
@@ -229,6 +312,16 @@ grz_confirm_continue <- function(stop_message) {
 #' @param warnings Logical; if `FALSE`, bypasses map-size confirmations.
 #'
 #' @return A `leaflet` htmlwidget.
+#' @examples
+#' \dontrun{
+#' gps_map(
+#'   gps_data,
+#'   groups = c("animal_id", "treatment"),
+#'   polygons_sf = paddocks,
+#'   polygon_label_col = "paddock_name",
+#'   polygon_group = "Paddocks"
+#' )
+#' }
 #' @export
 gps_map <- function(
   data,
@@ -240,6 +333,15 @@ gps_map <- function(
   state_colors = c(inactive = "#d7191c", active = "#1a9641"),
   state_legend_title = "State",
   timeline = FALSE,
+  polygons_sf = NULL,
+  polygon_label_col = NULL,
+  polygon_group = "Polygons",
+  polygon_color = "#03F",
+  polygon_weight = 5,
+  polygon_opacity = 0.5,
+  polygon_fill = TRUE,
+  polygon_fill_opacity = 0.2,
+  layer_control = TRUE,
   popup_fields = c("sensor_id", "datetime"),
   provider = "Esri.WorldImagery",
   point_radius = 3,
@@ -284,6 +386,27 @@ gps_map <- function(
   if (!is.character(state_colors) || length(state_colors) < 1L) {
     stop("`state_colors` must be a named character vector of colors.", call. = FALSE)
   }
+  if (!is.character(polygon_group) || length(polygon_group) != 1L || is.na(polygon_group) || trimws(polygon_group) == "") {
+    stop("`polygon_group` must be a single non-empty string.", call. = FALSE)
+  }
+  if (!is.character(polygon_color) || length(polygon_color) != 1L || is.na(polygon_color) || trimws(polygon_color) == "") {
+    stop("`polygon_color` must be a single colour value.", call. = FALSE)
+  }
+  if (!is.numeric(polygon_weight) || length(polygon_weight) != 1L || !is.finite(polygon_weight) || polygon_weight < 0) {
+    stop("`polygon_weight` must be a single non-negative number.", call. = FALSE)
+  }
+  if (!is.numeric(polygon_opacity) || length(polygon_opacity) != 1L || !is.finite(polygon_opacity) || polygon_opacity < 0 || polygon_opacity > 1) {
+    stop("`polygon_opacity` must be in [0, 1].", call. = FALSE)
+  }
+  if (!is.logical(polygon_fill) || length(polygon_fill) != 1L || is.na(polygon_fill)) {
+    stop("`polygon_fill` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.numeric(polygon_fill_opacity) || length(polygon_fill_opacity) != 1L || !is.finite(polygon_fill_opacity) || polygon_fill_opacity < 0 || polygon_fill_opacity > 1) {
+    stop("`polygon_fill_opacity` must be in [0, 1].", call. = FALSE)
+  }
+  if (!is.logical(layer_control) || length(layer_control) != 1L || is.na(layer_control)) {
+    stop("`layer_control` must be TRUE or FALSE.", call. = FALSE)
+  }
   if (is.null(names(state_colors)) || any(is.na(names(state_colors))) || any(trimws(names(state_colors)) == "")) {
     stop("`state_colors` must be named (e.g., c(inactive = '#d7191c', active = '#1a9641')).", call. = FALSE)
   }
@@ -309,6 +432,7 @@ gps_map <- function(
   }
 
   grz_validate_map_inputs(data, lon = lon, lat = lat, datetime = datetime, groups = groups, state_col = state_col)
+  polygons <- grz_prepare_map_polygons(polygons_sf, polygon_label_col = polygon_label_col)
 
   dat <- as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
   dat[[lon]] <- suppressWarnings(as.numeric(dat[[lon]]))
@@ -398,6 +522,10 @@ gps_map <- function(
   }
 
   dat <- dat[order(dat[[datetime]]), , drop = FALSE]
+  animal_layers <- if (is.null(group_col)) character() else unique(as.character(dat[[group_col]]))
+  if (!is.null(polygons) && polygon_group %in% animal_layers) {
+    stop("`polygon_group` must not duplicate an animal group layer name.", call. = FALSE)
+  }
   if (!is.null(state_col)) {
     state_info <- grz_make_state_palette(dat$.grz_state, state_colors = state_colors)
   }
@@ -406,42 +534,58 @@ gps_map <- function(
   map <- leaflet::leaflet(options = leaflet::leafletOptions(preferCanvas = TRUE))
   map <- leaflet::addProviderTiles(map, provider = provider)
 
+  if (!is.null(polygons)) {
+    polygon_labels <- if (is.null(polygon_label_col)) NULL else as.character(polygons[[polygon_label_col]])
+    map <- leaflet::addPolygons(
+      map,
+      data = polygons,
+      group = polygon_group,
+      stroke = TRUE,
+      color = polygon_color,
+      weight = polygon_weight,
+      opacity = polygon_opacity,
+      fill = polygon_fill,
+      fillColor = polygon_color,
+      fillOpacity = polygon_fill_opacity,
+      label = polygon_labels
+    )
+  }
+
+  if (!is.null(state_col)) {
+    point_colors <- state_info$colors
+    map <- leaflet::addLegend(
+      map,
+      position = "bottomright",
+      colors = state_info$legend_colors,
+      labels = state_info$legend_labels,
+      title = state_legend_title,
+      opacity = point_opacity
+    )
+  } else if (is.null(group_col)) {
+    point_colors <- rep("#2b8cbe", nrow(dat))
+  } else {
+    pal <- grz_make_group_palette(dat[[group_col]])
+    point_colors <- pal(dat[[group_col]])
+    map <- leaflet::addLegend(
+      map,
+      position = "bottomright",
+      pal = pal,
+      values = dat[[group_col]],
+      title = group_title
+    )
+  }
+
   if (isTRUE(timeline)) {
     if (!requireNamespace("leaflet.extras2", quietly = TRUE)) {
       stop("`timeline = TRUE` requires the `leaflet.extras2` package.", call. = FALSE)
     }
-    if (!requireNamespace("sf", quietly = TRUE)) {
-      stop("`timeline = TRUE` requires the `sf` package.", call. = FALSE)
+    if (!requireNamespace("yyjsonr", quietly = TRUE)) {
+      stop("`timeline = TRUE` requires the `yyjsonr` package.", call. = FALSE)
     }
-
     sf_dat <- sf::st_as_sf(dat, coords = c(lon, lat), crs = 4326, remove = FALSE)
     sf_dat$time <- format(dat[[datetime]], "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
     sf_dat$.grz_popup <- popup
-
-    if (!is.null(state_col)) {
-      timeline_state <- grz_make_state_palette(sf_dat$.grz_state, state_colors = state_colors)
-      sf_dat$.grz_color <- timeline_state$colors
-      map <- leaflet::addLegend(
-        map,
-        position = "bottomright",
-        colors = timeline_state$legend_colors,
-        labels = timeline_state$legend_labels,
-        title = state_legend_title,
-        opacity = point_opacity
-      )
-    } else if (is.null(group_col)) {
-      sf_dat$.grz_color <- "#2b8cbe"
-    } else {
-      pal <- grz_make_group_palette(sf_dat[[group_col]])
-      sf_dat$.grz_color <- pal(sf_dat[[group_col]])
-      map <- leaflet::addLegend(
-        map,
-        position = "bottomright",
-        pal = pal,
-        values = sf_dat[[group_col]],
-        title = group_title
-      )
-    }
+    sf_dat$.grz_color <- point_colors
 
     map <- leaflet.extras2::addTimeslider(
       map,
@@ -461,63 +605,67 @@ gps_map <- function(
         showAllOnStart = TRUE
       )
     )
-  } else if (!is.null(state_col)) {
-    map <- leaflet::addCircleMarkers(
-      map,
-      lng = dat[[lon]],
-      lat = dat[[lat]],
-      radius = point_radius,
-      stroke = FALSE,
-      fillColor = state_info$colors,
-      fillOpacity = point_opacity,
-      popup = popup
-    )
-    map <- leaflet::addLegend(
-      map,
-      position = "bottomright",
-      colors = state_info$legend_colors,
-      labels = state_info$legend_labels,
-      title = state_legend_title,
-      opacity = point_opacity
-    )
-  } else if (is.null(group_col)) {
-    map <- leaflet::addCircleMarkers(
-      map,
-      lng = dat[[lon]],
-      lat = dat[[lat]],
-      radius = point_radius,
-      stroke = FALSE,
-      fillColor = "#2b8cbe",
-      fillOpacity = point_opacity,
-      popup = popup
-    )
+
+    if (!is.null(group_col)) {
+      if (!requireNamespace("htmltools", quietly = TRUE)) {
+        stop("Grouped timelines require the `htmltools` package.", call. = FALSE)
+      }
+      timeline_layer_ids <- paste0("grz_timeline_", seq_len(nrow(dat)))
+      map <- leaflet::addCircleMarkers(
+        map,
+        lng = dat[[lon]],
+        lat = dat[[lat]],
+        layerId = timeline_layer_ids,
+        group = dat[[group_col]],
+        radius = point_radius,
+        stroke = FALSE,
+        fillColor = point_colors,
+        fillOpacity = point_opacity,
+        popup = popup
+      )
+      map <- grz_add_grouped_timeslider(
+        map,
+        times = sf_dat$time,
+        layer_ids = timeline_layer_ids,
+        groups = dat[[group_col]]
+      )
+    }
   } else {
-    pal <- grz_make_group_palette(dat[[group_col]])
     map <- leaflet::addCircleMarkers(
       map,
       lng = dat[[lon]],
       lat = dat[[lat]],
+      group = if (is.null(group_col)) NULL else dat[[group_col]],
       radius = point_radius,
       stroke = FALSE,
-      fillColor = pal(dat[[group_col]]),
+      fillColor = point_colors,
       fillOpacity = point_opacity,
       popup = popup
-    )
-    map <- leaflet::addLegend(
-      map,
-      position = "bottomright",
-      pal = pal,
-      values = dat[[group_col]],
-      title = group_title
     )
   }
 
+  overlay_layers <- unique(c(animal_layers, if (!is.null(polygons)) polygon_group else character()))
+  if (isTRUE(layer_control) && length(overlay_layers) > 0L) {
+    map <- leaflet::addLayersControl(
+      map,
+      overlayGroups = overlay_layers,
+      options = leaflet::layersControlOptions(collapsed = TRUE)
+    )
+  }
+
+  bounds_lon <- dat[[lon]]
+  bounds_lat <- dat[[lat]]
+  if (!is.null(polygons)) {
+    polygon_bounds <- sf::st_bbox(polygons)
+    bounds_lon <- c(bounds_lon, unname(polygon_bounds[c("xmin", "xmax")]))
+    bounds_lat <- c(bounds_lat, unname(polygon_bounds[c("ymin", "ymax")]))
+  }
   map <- leaflet::fitBounds(
     map,
-    lng1 = min(dat[[lon]], na.rm = TRUE),
-    lat1 = min(dat[[lat]], na.rm = TRUE),
-    lng2 = max(dat[[lon]], na.rm = TRUE),
-    lat2 = max(dat[[lat]], na.rm = TRUE)
+    lng1 = min(bounds_lon, na.rm = TRUE),
+    lat1 = min(bounds_lat, na.rm = TRUE),
+    lng2 = max(bounds_lon, na.rm = TRUE),
+    lat2 = max(bounds_lat, na.rm = TRUE)
   )
 
   map

@@ -7,7 +7,6 @@
 gps_interpolate(
   data,
   interval_mins = "base",
-  tolerance_mins = NULL,
   groups = NULL,
   keep_extra = TRUE,
   verbose = TRUE,
@@ -15,20 +14,19 @@ gps_interpolate(
 )
 }
 \arguments{
-\item{data}{Data frame with \code{sensor_id}, \code{datetime}, \code{lon}, and \code{lat}.}
+\item{data}{Data frame with raw observation rows and \code{sensor_id}, \code{datetime},
+\code{lon}, and \code{lat}. Output from \code{gps_regularise()} or \code{gps_interpolate()} is
+not accepted.}
 
 \item{interval_mins}{Target interval in minutes, or \code{"base"} to infer the
 median positive observed interval.}
 
-\item{tolerance_mins}{Tolerance in minutes for assigning observed fixes to
-the nearest grid time. \code{NULL} uses half of \code{interval_mins}. Use \code{0} for
-strict exact timestamp matching.}
-
 \item{groups}{Grouping columns for independent streams. Defaults to available
-\code{deployment_id}, \code{animal_id}, and \code{sensor_id}.}
+\code{deployment_id}, \code{animal_id}, \code{sensor_id}, and \code{segment_id}. An available
+\code{segment_id} is always included so interpolation cannot cross segments.}
 
-\item{keep_extra}{Logical; keep non-core metadata where exact observations
-exist and fill columns that are constant within a stream.}
+\item{keep_extra}{Logical; retain non-core metadata on exact observations and
+fill columns that are constant within a stream.}
 
 \item{verbose}{Logical; print a short summary.}
 
@@ -37,13 +35,28 @@ exist and fill columns that are constant within a stream.}
 \value{
 Interpolated GPS data with \code{is_observed}, \code{is_interpolated}, and
 \code{interpolation_gap_s}, \code{observed_datetime}, and \code{time_offset_s}. A
-\code{gps_reg} attribute summarises expected fixes, observed fixes, interpolated
-fixes, gaps, grid offsets, and achieved sampling interval.
+\code{gps_reg} attribute summarises raw observations, valid anchors, exact grid
+observations, interpolated and unfilled grid rows, gaps, and achieved
+sampling interval.
 }
 \description{
-Regularises each animal or sensor stream onto a time grid, assigns observed
-fixes to nearby grid times using \code{tolerance_mins}, and linearly interpolates
-longitude and latitude for remaining missing expected fixes. Interpolation is
-done within groups only. Use \code{gps_append_segments()} before interpolation
-when large gaps should split a track.
+Evaluates each animal or sensor stream on a common-phase regular time grid.
+Longitude and latitude are interpolated directly from the immediately
+preceding and following valid raw observations using elapsed-time weights.
+Observations are not snapped to nearby grid times and positions are never
+extrapolated. Interpolation is done within groups only. Use
+\code{gps_append_segments()} before interpolation when large gaps should split a
+track.
+}
+\examples{
+gps_interpolate(
+  data.frame(
+    sensor_id = "A",
+    datetime = as.POSIXct("2024-01-01 00:00:00", tz = "UTC") + c(2, 17, 32) * 60,
+    lon = c(150, 150.001, 150.002),
+    lat = c(-30, -30.001, -30.002)
+  ),
+  interval_mins = 15,
+  verbose = FALSE
+)
 }

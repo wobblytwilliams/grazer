@@ -98,7 +98,9 @@ grz_constant_or_na <- function(x) {
 #' @param data Data frame with `sensor_id`, `datetime`, `lon`, `lat`.
 #' @param groups Grouping columns for step calculations. Defaults to
 #'   `deployment_id` and `sensor_id` when `deployment_id` is present, otherwise
-#'   `sensor_id`.
+#'   `sensor_id`. When `segment_id` is present it is always used to prevent
+#'   steps across segment boundaries. `cum_distance_m` carries forward between
+#'   segments within the requested track groups without adding a gap step.
 #' @param verbose Logical; print a short summary.
 #' @param return_class Output class: `"data.frame"` (default) or `"data.table"`.
 #'
@@ -114,31 +116,39 @@ gps_steps <- function(
 ) {
   rc <- grz_match_output_class(return_class)
   dt <- grz_prepare_clean_dt(data, require_core = TRUE)
-  grp <- grz_default_group_cols(dt, groups = groups)
-  if (is.null(groups) && "segment_id" %in% names(dt) && !"segment_id" %in% grp) {
-    grp <- c(grp, "segment_id")
+  track_grp <- grz_default_group_cols(dt, groups = groups)
+  step_grp <- track_grp
+  cumulative_grp <- track_grp
+  if ("segment_id" %in% names(dt) && !"segment_id" %in% step_grp) {
+    step_grp <- c(step_grp, "segment_id")
+  }
+  if ("segment_id" %in% cumulative_grp) {
+    cumulative_grp <- setdiff(cumulative_grp, "segment_id")
+    if (!"sensor_id" %in% cumulative_grp) {
+      cumulative_grp <- c(cumulative_grp, "sensor_id")
+    }
   }
   dt[, .grz_row_id := .I]
-  data.table::setorderv(dt, c(grp, "datetime", ".grz_row_id"))
+  data.table::setorderv(dt, c(cumulative_grp, "datetime", ".grz_row_id"))
 
   dt[, `:=`(
     .grz_prev_datetime = shift(datetime),
     .grz_prev_lon = shift(lon),
     .grz_prev_lat = shift(lat)
-  ), by = grp]
+  ), by = step_grp]
 
   dt[, step_dt_s := as.numeric(datetime - .grz_prev_datetime, units = "secs")]
   dt[, step_m := grz_haversine_m(.grz_prev_lon, .grz_prev_lat, lon, lat)]
   dt[, speed_mps := data.table::fifelse(step_dt_s > 0, step_m / step_dt_s, NA_real_)]
   dt[, bearing_deg := grz_bearing_deg(.grz_prev_lon, .grz_prev_lat, lon, lat)]
-  dt[, turn_rad := grz_abs_turn_rad(bearing_deg, shift(bearing_deg)), by = grp]
-  dt[, cum_distance_m := cumsum(data.table::fifelse(is.na(step_m), 0, step_m)), by = grp]
-  dt[, net_displacement_m := grz_haversine_m(lon[1L], lat[1L], lon, lat), by = grp]
+  dt[, turn_rad := grz_abs_turn_rad(bearing_deg, shift(bearing_deg)), by = step_grp]
+  dt[, cum_distance_m := cumsum(data.table::fifelse(is.na(step_m), 0, step_m)), by = cumulative_grp]
+  dt[, net_displacement_m := grz_haversine_m(lon[1L], lat[1L], lon, lat), by = step_grp]
 
   dt[, c(".grz_row_id", ".grz_prev_datetime", ".grz_prev_lon", ".grz_prev_lat") := NULL]
 
   if (isTRUE(verbose)) {
-    cat(sprintf("[gps_steps] rows=%s groups=%s\n", format(nrow(dt), big.mark = ","), format(nrow(unique(dt[, ..grp])), big.mark = ",")))
+    cat(sprintf("[gps_steps] rows=%s groups=%s\n", format(nrow(dt), big.mark = ","), format(nrow(unique(dt[, ..step_grp])), big.mark = ",")))
   }
   grz_as_output(dt, rc)
 }
