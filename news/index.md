@@ -21,3 +21,5 @@
   now accepts projected or geographic polygon `sf` layers through
   `polygons_sf`, transforms them to WGS84, and includes them in map
   bounds and layer controls.
+- Timeline maps now position the layers control below the scrubber’s
+  datetime label so the controls do not overlap.
