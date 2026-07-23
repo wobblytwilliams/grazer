@@ -54,6 +54,7 @@ test_that("gps_map creates switchable animal layers for grouped timelines", {
   dependency_names <- vapply(out$dependencies, function(dependency) dependency$name, character(1))
 
   expect_true("addTimeslider" %in% methods)
+  expect_true("offsetGrazerTimelineLayerControl" %in% methods)
   expect_setequal(unique(marker_call$args[[5]]), c("A", "B"))
   expect_setequal(control_call$args[[2]], c("A", "B"))
   expect_equal(length(unique(timeline_call$args[[1]])), 3)
@@ -154,6 +155,7 @@ test_that("gps_map keeps polygon and animal controls on timeline maps", {
   control_call <- out$x$calls[[which(methods == "addLayersControl")]]
 
   expect_true(all(c("addPolygons", "addTimeslider", "addGrazerGroupedTimeslider") %in% methods))
+  expect_true("offsetGrazerTimelineLayerControl" %in% methods)
   expect_setequal(control_call$args[[2]], c("A", "B", "Paddocks"))
 })
 

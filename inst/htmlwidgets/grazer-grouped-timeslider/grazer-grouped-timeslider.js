@@ -93,3 +93,22 @@ LeafletWidget.methods.addGrazerGroupedTimeslider = function(times, layerIds, gro
   map.grzSliderCntr = new SliderControl();
   map.addControl(map.grzSliderCntr);
 };
+
+LeafletWidget.methods.offsetGrazerTimelineLayerControl = function(marginTopPx) {
+  var map = this;
+
+  // The slider's datetime label extends below the height Leaflet reserves for
+  // the slider control. Give the next top-right control enough space to sit
+  // below that label instead of covering it.
+  setTimeout(function() {
+    if (!map.currentLayersControl) {
+      return;
+    }
+    var container = map.currentLayersControl.getContainer();
+    if (!container) {
+      return;
+    }
+    container.classList.add("grz-layer-control-below-timeline");
+    container.style.marginTop = String(marginTopPx || 44) + "px";
+  }, 0);
+};

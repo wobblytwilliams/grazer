@@ -247,8 +247,20 @@ grz_grouped_timeslider_dependency <- function() {
   )
 }
 
+grz_add_timeslider_dependency <- function(map) {
+  dependency_names <- vapply(
+    map$dependencies,
+    function(dependency) dependency$name,
+    character(1)
+  )
+  if (!"grazer-grouped-timeslider" %in% dependency_names) {
+    map$dependencies <- c(map$dependencies, list(grz_grouped_timeslider_dependency()))
+  }
+  map
+}
+
 grz_add_grouped_timeslider <- function(map, times, layer_ids, groups) {
-  map$dependencies <- c(map$dependencies, list(grz_grouped_timeslider_dependency()))
+  map <- grz_add_timeslider_dependency(map)
   leaflet::invokeMethod(
     map,
     NULL,
@@ -257,6 +269,16 @@ grz_add_grouped_timeslider <- function(map, times, layer_ids, groups) {
     as.character(layer_ids),
     as.character(groups),
     list(position = "topright", range = TRUE, showAllOnStart = TRUE)
+  )
+}
+
+grz_offset_timeline_layer_control <- function(map, margin_top_px = 44) {
+  map <- grz_add_timeslider_dependency(map)
+  leaflet::invokeMethod(
+    map,
+    NULL,
+    "offsetGrazerTimelineLayerControl",
+    as.numeric(margin_top_px)
   )
 }
 
@@ -651,6 +673,9 @@ gps_map <- function(
       overlayGroups = overlay_layers,
       options = leaflet::layersControlOptions(collapsed = TRUE)
     )
+    if (isTRUE(timeline)) {
+      map <- grz_offset_timeline_layer_control(map)
+    }
   }
 
   bounds_lon <- dat[[lon]]
