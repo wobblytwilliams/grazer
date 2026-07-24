@@ -44,6 +44,16 @@
 <li>Layer controls now include a <code>Deselect all</code> button for hiding every animal and polygon overlay while retaining the base map.</li>
 <li>
 <code><a href="../reference/gps_map.html">gps_map()</a></code> legends now appear on the left so they do not overlap an expanded layers control on the right.</li>
+<li>
+<code><a href="../reference/gps_playback.html">gps_playback()</a></code> now provides switchable animal and polygon overlay layers, including a <code>Deselect all</code> control, while one shared scrubber continues to control all animal timelines.</li>
+<li>
+<code><a href="../reference/gps_playback.html">gps_playback()</a></code> now supports the polygon styling, labels, projected CRS handling, multiple grouping columns, state legend titles, and <code>max_groups</code> subsetting available in <code><a href="../reference/gps_map.html">gps_map()</a></code>.</li>
+<li>
+<code><a href="../reference/gps_playback.html">gps_playback()</a></code> now interpolates marker positions in the browser and progressively draws the current tail segment between GPS fixes by default. Set <code>smooth_movement = FALSE</code> to retain fix-to-fix playback.</li>
+<li>
+<code><a href="../reference/gps_playback.html">gps_playback()</a></code> now places a 0.25x to 4x playback-speed slider beneath the point-size control. Speed changes update the browser timer without rebuilding playback data.</li>
+<li>
+<code><a href="../reference/gps_playback.html">gps_playback()</a></code> now positions its colour legend above the playback scrubber using the scrubber’s rendered height.</li>
 </ul></div>
   </main></div>
 
