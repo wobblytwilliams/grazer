@@ -25,3 +25,6 @@
   datetime label so the controls do not overlap.
 - Layer controls now include a `Deselect all` button for hiding every
   animal and polygon overlay while retaining the base map.
+- [`gps_map()`](https://wobblytwilliams.github.io/grazer/reference/gps_map.md)
+  legends now appear on the left so they do not overlap an expanded
+  layers control on the right.
