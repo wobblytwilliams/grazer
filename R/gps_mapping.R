@@ -588,7 +588,7 @@ gps_map <- function(
     point_colors <- state_info$colors
     map <- leaflet::addLegend(
       map,
-      position = "bottomright",
+      position = "bottomleft",
       colors = state_info$legend_colors,
       labels = state_info$legend_labels,
       title = state_legend_title,
@@ -601,7 +601,7 @@ gps_map <- function(
     point_colors <- pal(dat[[group_col]])
     map <- leaflet::addLegend(
       map,
-      position = "bottomright",
+      position = "bottomleft",
       pal = pal,
       values = dat[[group_col]],
       title = group_title

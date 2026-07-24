@@ -36,11 +36,13 @@ test_that("gps_map creates separate static overlay layers from multiple group co
   marker_call <- out$x$calls[[which(methods == "addCircleMarkers")]]
   control_call <- out$x$calls[[which(methods == "addLayersControl")]]
   deselect_call <- out$x$calls[[which(methods == "addGrazerLayerDeselectAll")]]
+  legend_call <- out$x$calls[[which(methods == "addLegend")]]
 
   expect_setequal(unique(marker_call$args[[5]]), c("A | control", "B | shade"))
   expect_setequal(control_call$args[[2]], c("A | control", "B | shade"))
   expect_setequal(deselect_call$args[[1]], c("A | control", "B | shade"))
   expect_identical(deselect_call$args[[2]], "Deselect all")
+  expect_identical(legend_call$args[[1]]$position, "bottomleft")
 })
 
 test_that("gps_map creates switchable animal layers for grouped timelines", {
