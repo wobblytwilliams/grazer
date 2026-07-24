@@ -22,7 +22,7 @@ library(tidyr)
 
 has_leaflet <- requireNamespace("leaflet", quietly = TRUE)
 has_playback <- all(vapply(
-  c("leaflet", "leaftime", "htmlwidgets"),
+  c("leaflet", "leaftime", "htmlwidgets", "htmltools"),
   requireNamespace,
   quietly = TRUE,
   FUN.VALUE = logical(1)
@@ -1055,11 +1055,20 @@ if (has_playback) {
     gps_cleaned |>
       filter(sensor_id %in% c("C001", "C002")) |>
       filter(datetime <= min(datetime, na.rm = TRUE) + as.difftime(8, units = "hours")),
-    groups = "sensor_id",
+    # Multiple columns can define each switchable playback layer.
+    groups = c("sensor_id", "treatment"),
+    # Polygon layers use the same controls as the animal layers.
+    polygons_sf = paddocks_sf,
+    polygon_label_col = "paddock_name",
+    polygon_group = "Paddocks",
+    layer_control = TRUE,
+    # Smooth rendering moves markers between fixes without changing the data.
+    smooth_movement = TRUE,
     align = FALSE,
     tail_points = 12,
     show_points = TRUE,
     point_size_slider = FALSE,
+    playback_speed_slider = TRUE,
     playback_steps = 80,
     playback_duration_ms = 8000,
     progress = FALSE
@@ -1067,7 +1076,7 @@ if (has_playback) {
 
   playback_widget
 } else {
-  message("Skipping gps_playback(): leaflet, leaftime, or htmlwidgets is not installed.")
+  message("Skipping gps_playback(): a required mapping package is not installed.")
 }
 
 

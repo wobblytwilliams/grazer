@@ -22,7 +22,11 @@ test_that("mapping functions use package grouping conventions", {
     "polygons_sf", "polygon_label_col", "polygon_group"
   ) %in% map_args))
   expect_false(any(c("group", "block", "sample_n", "max_blocks", "max_block") %in% map_args))
-  expect_true("groups" %in% playback_args)
+  expect_true(all(c(
+    "groups", "max_groups", "layer_control", "smooth_movement",
+    "playback_speed_slider", "state_legend_title",
+    "polygons_sf", "polygon_label_col", "polygon_group"
+  ) %in% playback_args))
   expect_false("group" %in% playback_args)
 })
 
@@ -193,4 +197,191 @@ test_that("gps_playback returns a leaflet widget for a short track", {
 
   expect_s3_class(out, "leaflet")
   expect_s3_class(out, "htmlwidget")
+})
+
+test_that("gps_playback creates switchable grouped timelines with one playback control", {
+  skip_if_not_installed("leaflet")
+  skip_if_not_installed("leaftime")
+  skip_if_not_installed("htmlwidgets")
+  skip_if_not_installed("htmltools")
+
+  dat <- gps_two_sensor_fixture()
+  dat$treatment <- ifelse(dat$sensor_id == "A", "control", "shade")
+  out <- gps_playback(
+    dat,
+    groups = c("sensor_id", "treatment"),
+    align = FALSE,
+    point_size_slider = FALSE,
+    playback_steps = 10,
+    playback_duration_ms = 100,
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = FALSE
+  )
+  methods <- vapply(out$x$calls, function(call) call$method, character(1))
+  playback_call <- out$x$calls[[which(methods == "addGrazerGroupedPlayback")]]
+  control_call <- out$x$calls[[which(methods == "addLayersControl")]]
+  deselect_call <- out$x$calls[[which(methods == "addGrazerLayerDeselectAll")]]
+  legend_call <- out$x$calls[[which(methods == "addLegend")]]
+  dependency_names <- vapply(out$dependencies, function(dependency) dependency$name, character(1))
+  playback_groups <- vapply(playback_call$args[[1]], function(item) item$group, character(1))
+
+  expect_equal(sum(methods == "addGrazerGroupedPlayback"), 1)
+  expect_false("addTimeline" %in% methods)
+  expect_true("offsetGrazerPlaybackLegend" %in% methods)
+  expect_setequal(playback_groups, c("A | control", "B | shade"))
+  expect_setequal(control_call$args[[2]], playback_groups)
+  expect_setequal(deselect_call$args[[1]], playback_groups)
+  expect_identical(deselect_call$args[[2]], "Deselect all")
+  expect_true(playback_call$args[[3]]$enablePlayback)
+  expect_identical(playback_call$args[[3]]$position, "bottomleft")
+  expect_true(playback_call$args[[5]])
+  expect_identical(legend_call$args[[1]]$position, "bottomright")
+  expect_true(all(c("Leaflet.timeline", "grazer-grouped-timeslider") %in% dependency_names))
+  control_html <- vapply(
+    out$x$calls[methods == "addControl"],
+    function(call) call$args[[1]],
+    character(1)
+  )
+  expect_true(any(grepl("Playback speed", control_html, fixed = TRUE)))
+
+  first_features <- playback_call$args[[1]][[1]]$data$features
+  first_point <- first_features[[which(vapply(
+    first_features,
+    function(feature) feature$geometry$type == "Point",
+    logical(1)
+  ))[[1]]]]
+  first_tail <- first_features[[which(vapply(
+    first_features,
+    function(feature) feature$geometry$type == "LineString",
+    logical(1)
+  ))[[1]]]]
+  expect_true(all(c("nextLon", "nextLat") %in% names(first_point$properties)))
+  expect_identical(first_tail$properties$start, first_tail$properties$movementStart)
+})
+
+test_that("gps_playback supports projected polygon overlays and shared layer controls", {
+  skip_if_not_installed("leaflet")
+  skip_if_not_installed("leaftime")
+  skip_if_not_installed("htmlwidgets")
+  skip_if_not_installed("htmltools")
+  skip_if_not_installed("sf")
+
+  ring <- matrix(
+    c(150.01, -30.01, 150.03, -30.01, 150.03, -30.03, 150.01, -30.03, 150.01, -30.01),
+    ncol = 2,
+    byrow = TRUE
+  )
+  polygons <- sf::st_sf(
+    paddock = "north",
+    geometry = sf::st_sfc(sf::st_polygon(list(ring)), crs = 4326)
+  )
+  polygons <- sf::st_transform(polygons, 32756)
+
+  out <- gps_playback(
+    gps_two_sensor_fixture(),
+    groups = "sensor_id",
+    align = FALSE,
+    polygons_sf = polygons,
+    polygon_label_col = "paddock",
+    polygon_group = "Paddocks",
+    polygon_color = "#008000",
+    point_size_slider = FALSE,
+    playback_steps = 10,
+    playback_duration_ms = 100,
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = FALSE
+  )
+  methods <- vapply(out$x$calls, function(call) call$method, character(1))
+  polygon_call <- out$x$calls[[which(methods == "addPolygons")]]
+  control_call <- out$x$calls[[which(methods == "addLayersControl")]]
+  deselect_call <- out$x$calls[[which(methods == "addGrazerLayerDeselectAll")]]
+
+  expect_identical(polygon_call$args[[3]], "Paddocks")
+  expect_identical(polygon_call$args[[7]], "north")
+  expect_identical(polygon_call$args[[4]]$color, "#008000")
+  expect_setequal(control_call$args[[2]], c("A", "B", "Paddocks"))
+  expect_setequal(deselect_call$args[[1]], c("A", "B", "Paddocks"))
+  expect_true(max(out$x$limits$lng, na.rm = TRUE) < 181)
+  expect_true(min(out$x$limits$lat, na.rm = TRUE) > -91)
+})
+
+test_that("gps_playback preserves state colours within animal timeline layers", {
+  skip_if_not_installed("leaflet")
+  skip_if_not_installed("leaftime")
+  skip_if_not_installed("htmlwidgets")
+  skip_if_not_installed("htmltools")
+
+  dat <- gps_two_sensor_fixture()
+  dat$activity <- rep(c("inactive", "active"), length.out = nrow(dat))
+  out <- gps_playback(
+    dat,
+    groups = "sensor_id",
+    color_by = "state",
+    state_col = "activity",
+    state_legend_title = "Activity",
+    align = FALSE,
+    point_size_slider = FALSE,
+    playback_steps = 10,
+    playback_duration_ms = 100,
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = FALSE
+  )
+  methods <- vapply(out$x$calls, function(call) call$method, character(1))
+  playback_call <- out$x$calls[[which(methods == "addGrazerGroupedPlayback")]]
+  control_call <- out$x$calls[[which(methods == "addLayersControl")]]
+  legend_call <- out$x$calls[[which(methods == "addLegend")]]
+  point_colours <- unlist(lapply(playback_call$args[[1]], function(item) {
+    features <- item$data$features
+    vapply(
+      features[vapply(features, function(feature) feature$geometry$type == "Point", logical(1))],
+      function(feature) feature$properties$color,
+      character(1)
+    )
+  }), use.names = FALSE)
+
+  expect_setequal(control_call$args[[2]], c("A", "B"))
+  expect_setequal(unique(point_colours), c("#d7191c", "#1a9641"))
+  expect_identical(legend_call$args[[1]]$title, "Activity")
+})
+
+test_that("gps_playback can limit groups and omit layer controls", {
+  skip_if_not_installed("leaflet")
+  skip_if_not_installed("leaftime")
+  skip_if_not_installed("htmlwidgets")
+  skip_if_not_installed("htmltools")
+
+  out <- gps_playback(
+    gps_two_sensor_fixture(),
+    groups = "sensor_id",
+    max_groups = 1,
+    layer_control = FALSE,
+    smooth_movement = FALSE,
+    playback_speed_slider = FALSE,
+    align = FALSE,
+    point_size_slider = FALSE,
+    playback_steps = 10,
+    playback_duration_ms = 100,
+    warnings = FALSE,
+    progress = FALSE,
+    show_loading_overlay = FALSE
+  )
+  methods <- vapply(out$x$calls, function(call) call$method, character(1))
+  playback_call <- out$x$calls[[which(methods == "addGrazerGroupedPlayback")]]
+
+  expect_length(playback_call$args[[1]], 1)
+  expect_false(playback_call$args[[5]])
+  expect_false("addLayersControl" %in% methods)
+  expect_false("addGrazerLayerDeselectAll" %in% methods)
+  expect_false("addControl" %in% methods)
+
+  features <- playback_call$args[[1]][[1]]$data$features
+  first_tail <- features[[which(vapply(
+    features,
+    function(feature) feature$geometry$type == "LineString",
+    logical(1)
+  ))[[1]]]]
+  expect_identical(first_tail$properties$start, first_tail$properties$movementEnd)
 })

@@ -1,4 +1,159 @@
 /* global LeafletWidget, L, $ */
+LeafletWidget.methods.addGrazerGroupedPlayback = function(
+  groupedData,
+  timelineOptions,
+  sliderOptions,
+  width,
+  smoothMovement
+) {
+  var map = this;
+  var timelines = [];
+
+  if (!Array.isArray(groupedData) || groupedData.length === 0) {
+    return;
+  }
+
+  timelineOptions = timelineOptions || {};
+  sliderOptions = sliderOptions || {};
+  if (typeof timelineOptions.pointToLayer === "function") {
+    timelineOptions.pointToLayer =
+      timelineOptions.pointToLayer.bind(timelineOptions);
+  }
+
+  // One control owns every animal timeline. Hiding an animal removes only its
+  // Leaflet group; the shared control continues to keep its time in sync.
+  var timelineControl = L.timelineSliderControl(sliderOptions);
+  timelineControl.addTo(map);
+
+  groupedData.forEach(function(item, index) {
+    if (!item || !item.data || typeof item.group !== "string") {
+      return;
+    }
+
+    var timeline = L.timeline(item.data, timelineOptions);
+    timeline.on("layeradd", function(event) {
+      map.fire("grzplaybacklayeradd", { layer: event.layer });
+    });
+
+    if (smoothMovement === true) {
+      timeline.on("change", function() {
+        var currentTime = Number(timeline.time);
+        if (!Number.isFinite(currentTime)) {
+          return;
+        }
+
+        timeline.eachLayer(function(layer) {
+          var feature = layer && layer.feature ? layer.feature : null;
+          var properties = feature && feature.properties
+            ? feature.properties
+            : {};
+          var coordinates = feature && feature.geometry
+            ? feature.geometry.coordinates
+            : null;
+
+          if (
+            layer.options &&
+            layer.options.playbackPoint === true &&
+            Array.isArray(coordinates)
+          ) {
+            var pointStart = Number(properties.start);
+            var pointEnd = Number(properties.end);
+            var nextLon = Number(properties.nextLon);
+            var nextLat = Number(properties.nextLat);
+            var startLon = Number(coordinates[0]);
+            var startLat = Number(coordinates[1]);
+
+            if (
+              Number.isFinite(pointStart) &&
+              Number.isFinite(pointEnd) &&
+              pointEnd > pointStart &&
+              Number.isFinite(startLon) &&
+              Number.isFinite(startLat) &&
+              Number.isFinite(nextLon) &&
+              Number.isFinite(nextLat)
+            ) {
+              var pointFraction = Math.max(
+                0,
+                Math.min(1, (currentTime - pointStart) / (pointEnd - pointStart))
+              );
+              layer.setLatLng([
+                startLat + (nextLat - startLat) * pointFraction,
+                startLon + (nextLon - startLon) * pointFraction
+              ]);
+            }
+          }
+
+          if (
+            layer.options &&
+            layer.options.playbackTail === true &&
+            Array.isArray(coordinates) &&
+            coordinates.length === 2
+          ) {
+            var movementStart = Number(properties.movementStart);
+            var movementEnd = Number(properties.movementEnd);
+            var lineStart = coordinates[0];
+            var lineEnd = coordinates[1];
+
+            if (
+              Number.isFinite(movementStart) &&
+              Number.isFinite(movementEnd) &&
+              movementEnd > movementStart &&
+              Array.isArray(lineStart) &&
+              Array.isArray(lineEnd)
+            ) {
+              if (currentTime < movementEnd) {
+                var lineFraction = Math.max(
+                  0,
+                  Math.min(1, (currentTime - movementStart) / (movementEnd - movementStart))
+                );
+                layer.setLatLngs([
+                  [Number(lineStart[1]), Number(lineStart[0])],
+                  [
+                    Number(lineStart[1]) +
+                      (Number(lineEnd[1]) - Number(lineStart[1])) * lineFraction,
+                    Number(lineStart[0]) +
+                      (Number(lineEnd[0]) - Number(lineStart[0])) * lineFraction
+                  ]
+                ]);
+                layer._grzTailComplete = false;
+              } else if (layer._grzTailComplete !== true) {
+                layer.setLatLngs([
+                  [Number(lineStart[1]), Number(lineStart[0])],
+                  [Number(lineEnd[1]), Number(lineEnd[0])]
+                ]);
+                layer._grzTailComplete = true;
+              }
+            }
+          }
+        });
+      });
+    }
+
+    map.layerManager.addLayer(
+      timeline,
+      "timeline",
+      "grz_playback_" + String(index + 1),
+      item.group
+    );
+    timelines.push(timeline);
+  });
+
+  if (timelines.length === 0) {
+    map.removeControl(timelineControl);
+    return;
+  }
+
+  timelineControl.addTimelines.apply(timelineControl, timelines);
+
+  if (typeof width !== "undefined" && width !== null) {
+    $(timelineControl.container.parentElement).css({ width: width });
+    $(timelineControl.container).css({ width: "100%" });
+  }
+
+  map.grzPlaybackTimelines = timelines;
+  map.grzPlaybackTimelineControl = timelineControl;
+};
+
 LeafletWidget.methods.addGrazerGroupedTimeslider = function(times, layerIds, groups, options) {
   var map = this;
 
@@ -111,6 +266,39 @@ LeafletWidget.methods.offsetGrazerTimelineLayerControl = function(marginTopPx) {
     container.classList.add("grz-layer-control-below-timeline");
     container.style.marginTop = String(marginTopPx || 44) + "px";
   }, 0);
+};
+
+LeafletWidget.methods.offsetGrazerPlaybackLegend = function(gapPx) {
+  var map = this;
+
+  function updateLegendOffset() {
+    var timelineControl = map.grzPlaybackTimelineControl;
+    var timelineContainer = timelineControl
+      ? timelineControl.container
+      : null;
+    var mapContainer = map.getContainer();
+    if (!timelineContainer || !mapContainer) {
+      return;
+    }
+
+    var timelineBounds = timelineContainer.getBoundingClientRect();
+    var mapBounds = mapContainer.getBoundingClientRect();
+    var clearance = Math.max(
+      0,
+      Math.ceil(mapBounds.bottom - timelineBounds.top + (gapPx || 8))
+    );
+    var legends = mapContainer.querySelectorAll(
+      ".leaflet-bottom.leaflet-right .info.legend"
+    );
+
+    Array.prototype.forEach.call(legends, function(legend) {
+      legend.style.marginBottom = String(clearance) + "px";
+    });
+  }
+
+  setTimeout(updateLegendOffset, 0);
+  setTimeout(updateLegendOffset, 150);
+  map.on("resize", updateLegendOffset);
 };
 
 LeafletWidget.methods.addGrazerLayerDeselectAll = function(overlayGroups, label) {

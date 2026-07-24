@@ -237,10 +237,46 @@ grz_prepare_map_polygons <- function(polygons_sf, polygon_label_col) {
   )
 }
 
+grz_validate_polygon_options <- function(
+  polygon_group,
+  polygon_color,
+  polygon_weight,
+  polygon_opacity,
+  polygon_fill,
+  polygon_fill_opacity
+) {
+  if (!is.character(polygon_group) || length(polygon_group) != 1L ||
+      is.na(polygon_group) || trimws(polygon_group) == "") {
+    stop("`polygon_group` must be a single non-empty string.", call. = FALSE)
+  }
+  if (!is.character(polygon_color) || length(polygon_color) != 1L ||
+      is.na(polygon_color) || trimws(polygon_color) == "") {
+    stop("`polygon_color` must be a single colour value.", call. = FALSE)
+  }
+  if (!is.numeric(polygon_weight) || length(polygon_weight) != 1L ||
+      !is.finite(polygon_weight) || polygon_weight < 0) {
+    stop("`polygon_weight` must be a single non-negative number.", call. = FALSE)
+  }
+  if (!is.numeric(polygon_opacity) || length(polygon_opacity) != 1L ||
+      !is.finite(polygon_opacity) || polygon_opacity < 0 || polygon_opacity > 1) {
+    stop("`polygon_opacity` must be in [0, 1].", call. = FALSE)
+  }
+  if (!is.logical(polygon_fill) || length(polygon_fill) != 1L || is.na(polygon_fill)) {
+    stop("`polygon_fill` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.numeric(polygon_fill_opacity) || length(polygon_fill_opacity) != 1L ||
+      !is.finite(polygon_fill_opacity) ||
+      polygon_fill_opacity < 0 || polygon_fill_opacity > 1) {
+    stop("`polygon_fill_opacity` must be in [0, 1].", call. = FALSE)
+  }
+
+  invisible(NULL)
+}
+
 grz_grouped_timeslider_dependency <- function() {
   htmltools::htmlDependency(
     name = "grazer-grouped-timeslider",
-    version = "0.1.0",
+    version = "0.4.0",
     src = c(file = "htmlwidgets/grazer-grouped-timeslider"),
     package = "grazer",
     script = "grazer-grouped-timeslider.js"
@@ -257,6 +293,41 @@ grz_add_timeslider_dependency <- function(map) {
     map$dependencies <- c(map$dependencies, list(grz_grouped_timeslider_dependency()))
   }
   map
+}
+
+grz_add_leaftime_dependency <- function(map) {
+  dependency_names <- vapply(
+    map$dependencies,
+    function(dependency) dependency$name,
+    character(1)
+  )
+  if (!"Leaflet.timeline" %in% dependency_names) {
+    dependency <- utils::getFromNamespace("leaftimeDependency", "leaftime")()
+    map$dependencies <- c(map$dependencies, dependency)
+  }
+  map
+}
+
+grz_add_grouped_playback <- function(
+  map,
+  grouped_geojson,
+  timeline_options,
+  slider_options,
+  width = "100%",
+  smooth_movement = TRUE
+) {
+  map <- grz_add_leaftime_dependency(map)
+  map <- grz_add_timeslider_dependency(map)
+  leaflet::invokeMethod(
+    map,
+    NULL,
+    "addGrazerGroupedPlayback",
+    grouped_geojson,
+    timeline_options,
+    slider_options,
+    width,
+    isTRUE(smooth_movement)
+  )
 }
 
 grz_add_grouped_timeslider <- function(map, times, layer_ids, groups) {
@@ -279,6 +350,16 @@ grz_offset_timeline_layer_control <- function(map, margin_top_px = 44) {
     NULL,
     "offsetGrazerTimelineLayerControl",
     as.numeric(margin_top_px)
+  )
+}
+
+grz_offset_playback_legend <- function(map, gap_px = 8) {
+  map <- grz_add_timeslider_dependency(map)
+  leaflet::invokeMethod(
+    map,
+    NULL,
+    "offsetGrazerPlaybackLegend",
+    as.numeric(gap_px)
   )
 }
 
@@ -419,24 +500,14 @@ gps_map <- function(
   if (!is.character(state_colors) || length(state_colors) < 1L) {
     stop("`state_colors` must be a named character vector of colors.", call. = FALSE)
   }
-  if (!is.character(polygon_group) || length(polygon_group) != 1L || is.na(polygon_group) || trimws(polygon_group) == "") {
-    stop("`polygon_group` must be a single non-empty string.", call. = FALSE)
-  }
-  if (!is.character(polygon_color) || length(polygon_color) != 1L || is.na(polygon_color) || trimws(polygon_color) == "") {
-    stop("`polygon_color` must be a single colour value.", call. = FALSE)
-  }
-  if (!is.numeric(polygon_weight) || length(polygon_weight) != 1L || !is.finite(polygon_weight) || polygon_weight < 0) {
-    stop("`polygon_weight` must be a single non-negative number.", call. = FALSE)
-  }
-  if (!is.numeric(polygon_opacity) || length(polygon_opacity) != 1L || !is.finite(polygon_opacity) || polygon_opacity < 0 || polygon_opacity > 1) {
-    stop("`polygon_opacity` must be in [0, 1].", call. = FALSE)
-  }
-  if (!is.logical(polygon_fill) || length(polygon_fill) != 1L || is.na(polygon_fill)) {
-    stop("`polygon_fill` must be TRUE or FALSE.", call. = FALSE)
-  }
-  if (!is.numeric(polygon_fill_opacity) || length(polygon_fill_opacity) != 1L || !is.finite(polygon_fill_opacity) || polygon_fill_opacity < 0 || polygon_fill_opacity > 1) {
-    stop("`polygon_fill_opacity` must be in [0, 1].", call. = FALSE)
-  }
+  grz_validate_polygon_options(
+    polygon_group = polygon_group,
+    polygon_color = polygon_color,
+    polygon_weight = polygon_weight,
+    polygon_opacity = polygon_opacity,
+    polygon_fill = polygon_fill,
+    polygon_fill_opacity = polygon_fill_opacity
+  )
   if (!is.logical(layer_control) || length(layer_control) != 1L || is.na(layer_control)) {
     stop("`layer_control` must be TRUE or FALSE.", call. = FALSE)
   }
@@ -727,6 +798,21 @@ gps_map <- function(
 #'   colors by `state_col`.
 #' @param state_col Optional state column used when `color_by = "state"`.
 #' @param state_colors Named colors for state levels.
+#' @param state_legend_title Legend title used when `color_by = "state"`.
+#' @param polygons_sf Optional `sf` object containing polygon or multipolygon
+#'   geometries. Any declared CRS is accepted and transformed to EPSG:4326.
+#' @param polygon_label_col Optional column in `polygons_sf` used for labels.
+#' @param polygon_group Layer-control name for all polygon features.
+#' @param polygon_color Polygon border colour.
+#' @param polygon_weight Polygon border weight.
+#' @param polygon_opacity Polygon border opacity.
+#' @param polygon_fill Logical; fill polygons.
+#' @param polygon_fill_opacity Polygon fill opacity.
+#' @param layer_control Logical; add on/off controls for individual tracks and
+#'   polygon overlays. All track timelines share one playback control.
+#' @param smooth_movement Logical; interpolate marker positions and progressively
+#'   draw the current tail segment between observed fixes in the browser.
+#'   This changes only playback rendering, not the input data.
 #' @param align Logical; if `TRUE`, calls `gps_interpolate()` before playback.
 #' @param align_interval_mins Interval passed to `gps_interpolate(interval_mins = )`.
 #' @param align_keep_extra Logical; passed to `gps_interpolate(keep_extra = )`.
@@ -743,6 +829,9 @@ gps_map <- function(
 #' @param point_size_max Maximum value for the point-size slider.
 #' @param slider_position Position of timeline controls.
 #' @param playback_controls Logical; show play/pause/step controls.
+#' @param playback_speed_slider Logical; show a 0.25x to 4x playback-speed
+#'   slider beneath the point-size control. The slider is omitted when
+#'   `playback_controls = FALSE`.
 #' @param playback_steps Number of playback steps for the timeline.
 #' @param playback_duration_ms Minimum playback duration in milliseconds.
 #' @param show_ticks Logical; show timeline ticks.
@@ -753,6 +842,7 @@ gps_map <- function(
 #' @param popup_fields Fields to include in popups.
 #' @param show_legend Logical; add legend.
 #' @param group_palette HCL palette name used for group colours.
+#' @param max_groups Optional maximum number of complete groups to animate.
 #' @param max_rows Optional maximum rows to render after alignment. If set and
 #'   exceeded, rows are sampled across groups.
 #' @param render_every_n Keep every n-th aligned row per group (>= 1) before
@@ -765,6 +855,16 @@ gps_map <- function(
 #'   timeline layers are ready.
 #'
 #' @return A `leaflet` htmlwidget.
+#' @examples
+#' \dontrun{
+#' gps_playback(
+#'   gps_data,
+#'   groups = c("animal_id", "treatment"),
+#'   polygons_sf = paddocks,
+#'   polygon_label_col = "paddock_name",
+#'   polygon_group = "Paddocks"
+#' )
+#' }
 #' @export
 gps_playback <- function(
   data,
@@ -775,6 +875,17 @@ gps_playback <- function(
   color_by = c("group", "state"),
   state_col = NULL,
   state_colors = c(inactive = "#d7191c", active = "#1a9641"),
+  state_legend_title = "State",
+  polygons_sf = NULL,
+  polygon_label_col = NULL,
+  polygon_group = "Polygons",
+  polygon_color = "#03F",
+  polygon_weight = 5,
+  polygon_opacity = 0.5,
+  polygon_fill = TRUE,
+  polygon_fill_opacity = 0.2,
+  layer_control = TRUE,
+  smooth_movement = TRUE,
   align = TRUE,
   align_interval_mins = "base",
   align_keep_extra = TRUE,
@@ -788,6 +899,7 @@ gps_playback <- function(
   point_size_max = 25,
   slider_position = "bottomleft",
   playback_controls = TRUE,
+  playback_speed_slider = TRUE,
   playback_steps = 1000L,
   playback_duration_ms = 10000L,
   show_ticks = FALSE,
@@ -797,6 +909,7 @@ gps_playback <- function(
   popup_fields = c("sensor_id", "datetime"),
   show_legend = TRUE,
   group_palette = "Dark 3",
+  max_groups = NULL,
   max_rows = NULL,
   render_every_n = 1L,
   seed = 1,
@@ -808,7 +921,7 @@ gps_playback <- function(
   if (!is.data.frame(data)) {
     stop("`data` must be a data.frame.", call. = FALSE)
   }
-  needed_pkgs <- c("leaflet", "leaftime", "htmlwidgets")
+  needed_pkgs <- c("leaflet", "leaftime", "htmlwidgets", "htmltools")
   missing_pkgs <- needed_pkgs[!vapply(needed_pkgs, requireNamespace, logical(1), quietly = TRUE)]
   if (length(missing_pkgs) > 0L) {
     stop(
@@ -826,6 +939,24 @@ gps_playback <- function(
   }
   if (!is.character(datetime) || length(datetime) != 1L || is.na(datetime) || trimws(datetime) == "") {
     stop("`datetime` must be a single non-empty column name.", call. = FALSE)
+  }
+  if (!is.character(state_legend_title) || length(state_legend_title) != 1L ||
+      is.na(state_legend_title)) {
+    stop("`state_legend_title` must be a single string.", call. = FALSE)
+  }
+  grz_validate_polygon_options(
+    polygon_group = polygon_group,
+    polygon_color = polygon_color,
+    polygon_weight = polygon_weight,
+    polygon_opacity = polygon_opacity,
+    polygon_fill = polygon_fill,
+    polygon_fill_opacity = polygon_fill_opacity
+  )
+  if (!is.logical(layer_control) || length(layer_control) != 1L || is.na(layer_control)) {
+    stop("`layer_control` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(smooth_movement) || length(smooth_movement) != 1L || is.na(smooth_movement)) {
+    stop("`smooth_movement` must be TRUE or FALSE.", call. = FALSE)
   }
   if (!is.logical(align) || length(align) != 1L) {
     stop("`align` must be TRUE or FALSE.", call. = FALSE)
@@ -867,6 +998,10 @@ gps_playback <- function(
   if (!is.logical(playback_controls) || length(playback_controls) != 1L) {
     stop("`playback_controls` must be TRUE or FALSE.", call. = FALSE)
   }
+  if (!is.logical(playback_speed_slider) || length(playback_speed_slider) != 1L ||
+      is.na(playback_speed_slider)) {
+    stop("`playback_speed_slider` must be TRUE or FALSE.", call. = FALSE)
+  }
   if (!is.numeric(playback_steps) || length(playback_steps) != 1L || !is.finite(playback_steps) || playback_steps < 10) {
     stop("`playback_steps` must be a single number >= 10.", call. = FALSE)
   }
@@ -891,6 +1026,10 @@ gps_playback <- function(
   if (!is.character(group_palette) || length(group_palette) != 1L || is.na(group_palette) || trimws(group_palette) == "") {
     stop("`group_palette` must be a single palette name.", call. = FALSE)
   }
+  if (!is.null(max_groups) && (!is.numeric(max_groups) || length(max_groups) != 1L ||
+      !is.finite(max_groups) || max_groups < 1)) {
+    stop("`max_groups` must be NULL or a positive integer.", call. = FALSE)
+  }
   if (!is.null(max_rows) && (!is.numeric(max_rows) || length(max_rows) != 1L || !is.finite(max_rows) || max_rows < 100)) {
     stop("`max_rows` must be NULL or a single number >= 100.", call. = FALSE)
   }
@@ -912,6 +1051,7 @@ gps_playback <- function(
       stop("`state_col` must be a single column name when `color_by = \"state\"`.", call. = FALSE)
     }
   }
+  polygons <- grz_prepare_map_polygons(polygons_sf, polygon_label_col = polygon_label_col)
 
   stage_total <- if (isTRUE(align)) 9L else 8L
   stage_i <- 0L
@@ -928,9 +1068,9 @@ gps_playback <- function(
   stage_msg("Preparing input data")
   dat <- as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
   group_cols <- grz_guess_group_cols(dat, groups = groups)
+  has_group_layers <- !is.null(group_cols)
   if (is.null(group_cols)) {
     dat$.grz_group <- "track_1"
-    group_cols <- ".grz_group"
   } else if (length(group_cols) == 1L) {
     dat$.grz_group <- as.character(dat[[group_cols]])
   } else {
@@ -960,6 +1100,23 @@ gps_playback <- function(
   dat <- dat[valid, , drop = FALSE]
   if (nrow(dat) < 2L) {
     stop("Need at least 2 valid rows to build playback.", call. = FALSE)
+  }
+
+  if (!is.null(max_groups)) {
+    n_groups_before <- length(unique(dat$.grz_group))
+    dat <- grz_select_groups(
+      data = dat,
+      group_col = ".grz_group",
+      max_groups = as.integer(max_groups),
+      seed = seed
+    )
+    if (isTRUE(warnings) && length(unique(dat$.grz_group)) < n_groups_before) {
+      warning(
+        "Playback data limited to ", length(unique(dat$.grz_group)),
+        " complete groups via `max_groups`.",
+        call. = FALSE
+      )
+    }
   }
 
   if (isTRUE(align)) {
@@ -1038,7 +1195,7 @@ gps_playback <- function(
     dat$.grz_color <- state_info$colors
     legend_colors <- state_info$legend_colors
     legend_labels <- state_info$legend_labels
-    legend_title <- state_col
+    legend_title <- state_legend_title
   } else {
     group_levels <- unique(dat$.grz_group)
     cols <- grDevices::hcl.colors(max(3L, length(group_levels)), palette = group_palette)
@@ -1046,7 +1203,7 @@ gps_playback <- function(
     dat$.grz_color <- pal(dat$.grz_group)
     legend_labels <- group_levels
     legend_colors <- pal(group_levels)
-    legend_title <- if (!is.null(group_cols)) paste(group_cols, collapse = " + ") else "Group"
+    legend_title <- if (isTRUE(has_group_layers)) paste(group_cols, collapse = " + ") else "Group"
   }
 
   popup <- grz_make_popup(dat, fields = popup_fields)
@@ -1055,6 +1212,8 @@ gps_playback <- function(
   # Persist each point until the next observation in the same group to reduce
   # visual flicker during timeline playback.
   point_end_ms <- rep(NA_real_, nrow(dat))
+  point_next_lon <- as.numeric(dat[[lon]])
+  point_next_lat <- as.numeric(dat[[lat]])
   split_idx <- split(seq_len(nrow(dat)), dat$.grz_group, drop = TRUE)
   for (idx in split_idx) {
     if (length(idx) == 0L) {
@@ -1069,6 +1228,8 @@ gps_playback <- function(
       i_cur <- idx[[j]]
       i_next <- idx[[j + 1L]]
       point_end_ms[[i_cur]] <- max(time_ms[[i_next]], time_ms[[i_cur]] + point_hold_ms)
+      point_next_lon[[i_cur]] <- as.numeric(dat[[lon]][[i_next]])
+      point_next_lat[[i_cur]] <- as.numeric(dat[[lat]][[i_next]])
     }
     i_last <- idx[[length(idx)]]
     point_end_ms[[i_last]] <- time_ms[[i_last]] + point_hold_ms
@@ -1076,9 +1237,11 @@ gps_playback <- function(
 
   stage_msg("Building point features")
   point_features <- list()
+  point_feature_groups <- character()
   if (isTRUE(show_points)) {
     n_points <- nrow(dat)
     point_features <- vector("list", n_points)
+    point_feature_groups <- as.character(dat$.grz_group)
     pb_points <- NULL
     pb_tick <- max(1L, as.integer(round(n_points / 200)))
     if (isTRUE(progress) && n_points >= 1000L) {
@@ -1094,6 +1257,8 @@ gps_playback <- function(
           color = dat$.grz_color[[i]],
           radius = as.numeric(point_radius),
           fillOpacity = as.numeric(point_opacity),
+          nextLon = point_next_lon[[i]],
+          nextLat = point_next_lat[[i]],
           popup = popup[[i]]
         ),
         geometry = list(
@@ -1120,6 +1285,7 @@ gps_playback <- function(
   }
   line_capacity <- max(1L, edge_count)
   line_features <- vector("list", line_capacity)
+  line_feature_groups <- character(line_capacity)
   line_i <- 0L
   edge_i <- 0L
 
@@ -1138,8 +1304,10 @@ gps_playback <- function(
         }
         next
       }
-      seg_start <- time_ms[[i_cur]]
-      seg_end <- time_ms[[i_cur]] + tail_ms
+      movement_start <- time_ms[[i_prev]]
+      movement_end <- time_ms[[i_cur]]
+      seg_start <- if (isTRUE(smooth_movement)) movement_start else movement_end
+      seg_end <- movement_end + tail_ms
       if (!is.finite(seg_start) || !is.finite(seg_end) || seg_end <= seg_start) {
         if (!is.null(pb_lines) && ((edge_i %% pb_tick_lines) == 0L || edge_i == edge_count)) {
           utils::setTxtProgressBar(pb_lines, edge_i)
@@ -1148,6 +1316,7 @@ gps_playback <- function(
       }
 
       line_i <- line_i + 1L
+      line_feature_groups[[line_i]] <- as.character(dat$.grz_group[[i_cur]])
       line_features[[line_i]] <- list(
         type = "Feature",
         properties = list(
@@ -1155,7 +1324,9 @@ gps_playback <- function(
           end = seg_end,
           color = dat$.grz_color[[i_cur]],
           weight = tail_weight_fixed,
-          opacity = tail_opacity_fixed
+          opacity = tail_opacity_fixed,
+          movementStart = movement_start,
+          movementEnd = movement_end
         ),
         geometry = list(
           type = "LineString",
@@ -1176,15 +1347,32 @@ gps_playback <- function(
   }
   if (line_i == 0L) {
     line_features <- list()
+    line_feature_groups <- character()
   } else if (line_i < length(line_features)) {
     line_features <- line_features[seq_len(line_i)]
+    line_feature_groups <- line_feature_groups[seq_len(line_i)]
   }
 
   features <- c(line_features, point_features)
+  feature_groups <- c(line_feature_groups, point_feature_groups)
   if (length(features) == 0L) {
     stop("No drawable playback features were created.", call. = FALSE)
   }
-  geojson <- list(type = "FeatureCollection", features = features)
+  playback_groups <- unique(as.character(dat$.grz_group))
+  feature_indices <- split(
+    seq_along(features),
+    factor(feature_groups, levels = playback_groups),
+    drop = TRUE
+  )
+  grouped_geojson <- lapply(names(feature_indices), function(group_name) {
+    list(
+      group = group_name,
+      data = list(
+        type = "FeatureCollection",
+        features = unname(features[feature_indices[[group_name]]])
+      )
+    )
+  })
 
   timeline_point_to_layer <- htmlwidgets::JS(
     "function(feature, latlng) {
@@ -1259,31 +1447,80 @@ gps_playback <- function(
   timeline_opts$onEachFeature <- timeline_on_each
 
   stage_msg("Building leaflet widget")
-  map <- leaflet::leaflet(options = leaflet::leafletOptions(preferCanvas = TRUE)) |>
-    leaflet::addProviderTiles(provider = provider) |>
-    leaftime::addTimeline(
-      geojson,
-      timelineOpts = timeline_opts,
-      sliderOpts = slider_opts,
-      width = "100%"
-    ) |>
-    leaflet::fitBounds(
-      lng1 = min(dat[[lon]], na.rm = TRUE),
-      lat1 = min(dat[[lat]], na.rm = TRUE),
-      lng2 = max(dat[[lon]], na.rm = TRUE),
-      lat2 = max(dat[[lat]], na.rm = TRUE)
+  timeline_layers <- names(feature_indices)
+  animal_layers <- if (isTRUE(has_group_layers)) timeline_layers else character()
+  if (!is.null(polygons) && polygon_group %in% timeline_layers) {
+    stop("`polygon_group` must not duplicate an animal group layer name.", call. = FALSE)
+  }
+
+  map <- leaflet::leaflet(options = leaflet::leafletOptions(preferCanvas = TRUE))
+  map <- leaflet::addProviderTiles(map, provider = provider)
+
+  if (!is.null(polygons)) {
+    polygon_labels <- if (is.null(polygon_label_col)) NULL else as.character(polygons[[polygon_label_col]])
+    map <- leaflet::addPolygons(
+      map,
+      data = polygons,
+      group = polygon_group,
+      stroke = TRUE,
+      color = polygon_color,
+      weight = polygon_weight,
+      opacity = polygon_opacity,
+      fill = polygon_fill,
+      fillColor = polygon_color,
+      fillOpacity = polygon_fill_opacity,
+      label = polygon_labels
     )
+  }
+
+  map <- grz_add_grouped_playback(
+    map,
+    grouped_geojson = grouped_geojson,
+    timeline_options = timeline_opts,
+    slider_options = slider_opts,
+    width = "100%",
+    smooth_movement = smooth_movement
+  )
 
   if (isTRUE(show_legend)) {
     map <- leaflet::addLegend(
       map,
-      position = "topright",
+      position = "bottomright",
       colors = legend_colors,
       labels = legend_labels,
       title = legend_title,
       opacity = 1
     )
+    map <- grz_offset_playback_legend(map)
   }
+
+  overlay_layers <- unique(c(animal_layers, if (!is.null(polygons)) polygon_group else character()))
+  if (isTRUE(layer_control) && length(overlay_layers) > 0L) {
+    map <- leaflet::addLayersControl(
+      map,
+      overlayGroups = overlay_layers,
+      options = leaflet::layersControlOptions(collapsed = TRUE)
+    )
+    map <- grz_add_layer_deselect_all(map, overlay_groups = overlay_layers)
+    if (identical(slider_position, "topright")) {
+      map <- grz_offset_timeline_layer_control(map)
+    }
+  }
+
+  bounds_lon <- dat[[lon]]
+  bounds_lat <- dat[[lat]]
+  if (!is.null(polygons)) {
+    polygon_bounds <- sf::st_bbox(polygons)
+    bounds_lon <- c(bounds_lon, unname(polygon_bounds[c("xmin", "xmax")]))
+    bounds_lat <- c(bounds_lat, unname(polygon_bounds[c("ymin", "ymax")]))
+  }
+  map <- leaflet::fitBounds(
+    map,
+    lng1 = min(bounds_lon, na.rm = TRUE),
+    lat1 = min(bounds_lat, na.rm = TRUE),
+    lng2 = max(bounds_lon, na.rm = TRUE),
+    lat2 = max(bounds_lat, na.rm = TRUE)
+  )
 
   stage_msg("Attaching interactive map controls")
   if (isTRUE(show_loading_overlay)) {
@@ -1331,21 +1568,29 @@ gps_playback <- function(
 
          function hasPlaybackLayers() {
            var found = false;
-           map.eachLayer(function(layer) {
+           function inspectLayer(layer) {
+             if (found || !layer) return;
              var o = layer && layer.options ? layer.options : null;
              if (o && (o.playbackPoint === true || o.playbackTail === true)) {
                found = true;
+               return;
              }
-           });
+             if (typeof layer.eachLayer === 'function') {
+               layer.eachLayer(inspectLayer);
+             }
+           }
+           map.eachLayer(inspectLayer);
            return found;
          }
 
-         map.on('layeradd', function(e) {
+         function inspectAddedLayer(e) {
            var o = e.layer && e.layer.options ? e.layer.options : null;
            if (o && (o.playbackPoint === true || o.playbackTail === true)) {
              hideOverlay();
            }
-         });
+         }
+         map.on('layeradd', inspectAddedLayer);
+         map.on('grzplaybacklayeradd', inspectAddedLayer);
 
          var t0 = Date.now();
          var timer = window.setInterval(function() {
@@ -1405,19 +1650,26 @@ gps_playback <- function(
 
          function applyRadius(r) {
            currentRadius = r;
-           map.eachLayer(function(layer) {
+           function resizeLayer(layer) {
+             if (!layer) return;
              if (layer && layer.options && layer.options.playbackPoint === true && typeof layer.setRadius === 'function') {
                layer.setRadius(currentRadius);
              }
-           });
+             if (typeof layer.eachLayer === 'function') {
+               layer.eachLayer(resizeLayer);
+             }
+           }
+           map.eachLayer(resizeLayer);
          }
 
-         map.on('layeradd', function(e) {
+         function resizeAddedLayer(e) {
            var layer = e.layer;
            if (layer && layer.options && layer.options.playbackPoint === true && typeof layer.setRadius === 'function') {
              layer.setRadius(currentRadius);
            }
-         });
+         }
+         map.on('layeradd', resizeAddedLayer);
+         map.on('grzplaybacklayeradd', resizeAddedLayer);
 
          function bindSlider() {
            var input = document.getElementById(sliderId);
@@ -1444,6 +1696,85 @@ gps_playback <- function(
       slider_wrap_id
     )
     map <- htmlwidgets::onRender(map, js_point_slider)
+  }
+
+  if (isTRUE(playback_speed_slider) && isTRUE(playback_controls)) {
+    speed_id <- paste0("grz_playback_speed_", as.integer(stats::runif(1, 1, 1e9)))
+    speed_output_id <- paste0(speed_id, "_output")
+    speed_wrap_id <- paste0(speed_id, "_wrap")
+
+    speed_html <- paste0(
+      "<div id='", speed_wrap_id, "' class='leaflet-bar' ",
+      "style='background:white;padding:6px 8px;min-width:170px;font-size:12px;'>",
+      "<div style='margin-bottom:4px;font-weight:600;'>Playback speed ",
+      "<span id='", speed_output_id, "' style='float:right;font-weight:400;'>1x</span></div>",
+      "<input id='", speed_id, "' type='range' min='0.25' max='4' ",
+      "step='0.25' value='1' aria-label='Playback speed' style='width:150px;'/>",
+      "</div>"
+    )
+    map <- leaflet::addControl(
+      map,
+      html = speed_html,
+      position = "topleft"
+    )
+
+    js_speed_slider <- sprintf(
+      "function(el, x) {
+         var map = (this && typeof this.eachLayer === 'function')
+           ? this
+           : (this && typeof this.getMap === 'function' ? this.getMap() : null);
+         if (!map) return;
+         var baseDuration = %s;
+         var sliderId = '%s';
+         var outputId = '%s';
+         var wrapId = '%s';
+
+         function formatSpeed(value) {
+           return String(Math.round(value * 100) / 100) + 'x';
+         }
+
+         function applySpeed(multiplier) {
+           var control = map.grzPlaybackTimelineControl;
+           if (!control || !control.options || !isFinite(multiplier) || multiplier <= 0) {
+             return false;
+           }
+           control.options.duration = baseDuration / multiplier;
+           control._stepDuration = Math.max(
+             1,
+             control.options.duration / control.options.steps
+           );
+           var output = document.getElementById(outputId);
+           if (output) {
+             output.textContent = formatSpeed(multiplier);
+           }
+           return true;
+         }
+
+         function bindSlider() {
+           var input = document.getElementById(sliderId);
+           if (!input || !map.grzPlaybackTimelineControl) {
+             setTimeout(bindSlider, 150);
+             return;
+           }
+           var wrap = document.getElementById(wrapId);
+           if (wrap && window.L && L.DomEvent) {
+             L.DomEvent.disableClickPropagation(wrap);
+             L.DomEvent.disableScrollPropagation(wrap);
+           }
+           input.addEventListener('input', function(ev) {
+             var value = parseFloat(ev.target.value);
+             applySpeed(value);
+           });
+           applySpeed(parseFloat(input.value));
+         }
+         bindSlider();
+       }",
+      format(as.numeric(playback_duration_ms), scientific = FALSE),
+      speed_id,
+      speed_output_id,
+      speed_wrap_id
+    )
+    map <- htmlwidgets::onRender(map, js_speed_slider)
   }
 
   map

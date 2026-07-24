@@ -13,6 +13,17 @@ gps_playback(
   color_by = c("group", "state"),
   state_col = NULL,
   state_colors = c(inactive = "#d7191c", active = "#1a9641"),
+  state_legend_title = "State",
+  polygons_sf = NULL,
+  polygon_label_col = NULL,
+  polygon_group = "Polygons",
+  polygon_color = "#03F",
+  polygon_weight = 5,
+  polygon_opacity = 0.5,
+  polygon_fill = TRUE,
+  polygon_fill_opacity = 0.2,
+  layer_control = TRUE,
+  smooth_movement = TRUE,
   align = TRUE,
   align_interval_mins = "base",
   align_keep_extra = TRUE,
@@ -26,6 +37,7 @@ gps_playback(
   point_size_max = 25,
   slider_position = "bottomleft",
   playback_controls = TRUE,
+  playback_speed_slider = TRUE,
   playback_steps = 1000L,
   playback_duration_ms = 10000L,
   show_ticks = FALSE,
@@ -35,6 +47,7 @@ gps_playback(
   popup_fields = c("sensor_id", "datetime"),
   show_legend = TRUE,
   group_palette = "Dark 3",
+  max_groups = NULL,
   max_rows = NULL,
   render_every_n = 1L,
   seed = 1,
@@ -61,6 +74,32 @@ colors by \code{state_col}.}
 \item{state_col}{Optional state column used when \code{color_by = "state"}.}
 
 \item{state_colors}{Named colors for state levels.}
+
+\item{state_legend_title}{Legend title used when \code{color_by = "state"}.}
+
+\item{polygons_sf}{Optional \code{sf} object containing polygon or multipolygon
+geometries. Any declared CRS is accepted and transformed to EPSG:4326.}
+
+\item{polygon_label_col}{Optional column in \code{polygons_sf} used for labels.}
+
+\item{polygon_group}{Layer-control name for all polygon features.}
+
+\item{polygon_color}{Polygon border colour.}
+
+\item{polygon_weight}{Polygon border weight.}
+
+\item{polygon_opacity}{Polygon border opacity.}
+
+\item{polygon_fill}{Logical; fill polygons.}
+
+\item{polygon_fill_opacity}{Polygon fill opacity.}
+
+\item{layer_control}{Logical; add on/off controls for individual tracks and
+polygon overlays. All track timelines share one playback control.}
+
+\item{smooth_movement}{Logical; interpolate marker positions and progressively
+draw the current tail segment between observed fixes in the browser.
+This changes only playback rendering, not the input data.}
 
 \item{align}{Logical; if \code{TRUE}, calls \code{gps_interpolate()} before playback.}
 
@@ -91,6 +130,10 @@ radius during playback.}
 
 \item{playback_controls}{Logical; show play/pause/step controls.}
 
+\item{playback_speed_slider}{Logical; show a 0.25x to 4x playback-speed
+slider beneath the point-size control. The slider is omitted when
+\code{playback_controls = FALSE}.}
+
 \item{playback_steps}{Number of playback steps for the timeline.}
 
 \item{playback_duration_ms}{Minimum playback duration in milliseconds.}
@@ -109,6 +152,8 @@ interaction ends.}
 \item{show_legend}{Logical; add legend.}
 
 \item{group_palette}{HCL palette name used for group colours.}
+
+\item{max_groups}{Optional maximum number of complete groups to animate.}
 
 \item{max_rows}{Optional maximum rows to render after alignment. If set and
 exceeded, rows are sampled across groups.}
@@ -137,4 +182,15 @@ presentation-oriented and avoids Shiny.
 \details{
 Inspiration: the playback/tail design was informed by the moveVis package
 (\url{https://github.com/16EAGLE/moveVis}).
+}
+\examples{
+\dontrun{
+gps_playback(
+  gps_data,
+  groups = c("animal_id", "treatment"),
+  polygons_sf = paddocks,
+  polygon_label_col = "paddock_name",
+  polygon_group = "Paddocks"
+)
+}
 }
