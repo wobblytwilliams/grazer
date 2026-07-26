@@ -12,8 +12,12 @@ workflows are ready.
 ## Installation
 
 ```r
-install.packages("devtools")
-devtools::install_github("wobblytwilliams/grazer")
+install.packages("pak")
+pak::pak("wobblytwilliams/grazer")
+
+##Warning message:
+## `install_github()` was deprecated in devtools 2.5.0.
+##ℹ Please use pak::pak("user/repo") instead.
 ```
 
 ## GPS data
